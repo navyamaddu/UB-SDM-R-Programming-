@@ -1,0 +1,363 @@
+---
+title: "Homework_1"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+	echo = TRUE,
+	message = FALSE,
+	warning = FALSE
+)
+```
+
+## Problem 1
+
+The goal is to explore College data set using the functions like summary(),pairs() and table().
+
+College data set is present in the ISLR package.
+
+Let us load the data and view the data using head().
+
+```{r}
+library(ISLR)
+dim(College)
+```
+
+The College data set contains 777 rows and 18 columns with each row representing the Statistics for Colleges in US from the 1995 issue of US News and World Report.
+
+```{r}
+head(College)
+```
+The head() function displays the first 6 rows of the data set. Some of the columns are Private, Apps, Accept, Enroll, Top10perc, Top25perc.
+
+```{r}
+str(College)
+```
+
+The function str() provides the data types of all the columns in the college data set. All the columns are numeric except Private which is a factor with two levels.
+
+### 1a - Numerical summary
+
+```{r}
+summary(College)
+
+```
+
+The summary() function produces the numerical summary of the columns of the College data set.
+The summary includes the Min value, 1st and 3rd Quantile values, Median , Mean and the Max values. For instance, the number of applications are in the range 81 to 48094. The Grad. rate is in the range 10 to 118 indicating there are outliers since the maximum percentage should not be greater than 100.
+
+### 1b - Pairwise scatterplots
+
+```{r}
+pairs(College[,-1])
+```
+
+The function pairs() produces pairwise scatter plots of all the columns. The factor column Private is excluded from the plots since it is a factor .
+
+### 1c - New variable "Elite"
+
+```{r}
+Elite<-ifelse(College$Top10perc>50,"Elite","Non-Elite")
+College_new<-cbind(College,Elite)
+names(College_new)
+
+```
+
+The qualitative variable Elite is set to True if the proportion of students coming from the Top 10%(Top10perc) of their high school exceeds 50%.
+
+The qualitative variable Elite is set to False if the proportion of students coming from the Top 10%(Top10perc) of their high school are less than or equal to 50%.
+
+This new variable Elite is added to the data set using cbind().
+
+### 1d - Number of Elite schools
+
+```{r}
+table(College_new$Elite)
+```
+
+From the table function, we can say that there are 78 Elite schools
+
+### 1e - Number of private Elite schools
+
+```{r}
+table(College_new$Elite,College_new$Private)
+```
+
+From the table function, we can say that 65 elite schools are private
+
+### 1f - Grad. rate of Elite schools
+
+```{r}
+
+
+Elite_ind<-which(College_new$Elite=="Elite")
+Elite_Gradrate<-mean(College_new[Elite_ind,]$Grad.Rate)
+NonElite_ind<-which(College_new$Elite=="Non-Elite")
+NonElite_Gradrate<-mean(College_new[NonElite_ind,]$Grad.Rate)
+print(paste("Mean Grad rate of Elite Schools",Elite_Gradrate))
+print(paste("Mean Grad rate of Non-Elite Schools",NonElite_Gradrate))
+
+```
+
+From the average Grad rates of elite and non elite schools, we can say that Elite schools tend to have higher graduation rate(~83.3%) compared to Non-elite schools(~63.4%)
+
+## Problem 2
+
+The goal is to explore and pre-process the Auto data set 
+
+Auto data set is present in the ISLR package.
+
+Before plotting graphs and pre-processing the data set, let us inspect the data using the functions dim(), names(), str(), head(), summary().
+
+```{r}
+library(ISLR)
+dim(Auto)
+```
+
+The dataset contains 392 rows and 9 columns. Each of the 392 rows correspond to model of car and the columns represent various features.
+
+```{r}
+
+head(Auto)
+
+```
+
+The head() function displays the first 6 rows of the data set. Some of the columns are cylinders, displacement, horsepower, weight, acceleration, year, origin.
+
+```{r}
+summary(Auto)
+```
+
+The summary() function produces the numerical summary of the columns of the Auto data set.
+The summary includes the Min value, 1st and 3rd Quantile values, Median , Mean and the Max values.For instance, the miles per gallon(mpg) of all the vehicles are in the range 9 to 46.60. The weight of all vehicles are in the range 1613 to 5140lbs. 
+
+### 2a - Remove Missing values
+
+```{r}
+Missing_values = ifelse(any(is.na(Auto)),"Auto data contains missing values","There are no missing values in Auto data set")
+Missing_values
+```
+
+We can observe that the data does not contain any missing values.
+
+### 2b - Numerical and continuous variable
+
+Let us apply str() function to inspect the data types of all columns.
+
+```{r}
+str(Auto)
+```
+
+The str() function returns the data types of all columns in the data set. In the Auto data set, name column is a factor variable(categorical)  
+mpg,cylinders, displacement, horsepower, weight, acceleration, year and origin are numerical (continuous). 
+
+```{r}
+
+unique(Auto$cylinders)
+unique(Auto$origin)
+```
+
+
+We can observe that cylinders and origin are considered as numerical but they can be converted to factors given few levels.
+
+### 2c - Mean and standard deviation of all the continous variables in the data.
+
+```{r}
+{ 
+print(paste("mpg- Mean-",mean(Auto$mpg),"Standard Deviation:",sd(Auto$mpg)))
+print(paste("Displacement- Mean:",mean(Auto$displacement),"Standard Deviation:",sd(Auto$displacement)))
+print(paste("Horsepower- Mean:",mean(Auto$horsepower),"Standard Deviation:",sd(Auto$horsepower)))
+print(paste("Weight- Mean:",mean(Auto$weight),"Standard Deviation:",sd(Auto$weight)))
+print(paste("Acceleration- Mean:",mean(Auto$acceleration),"Standard Deviation:",sd(Auto$acceleration)))
+}
+```
+
+### 2d - Remove from 5th to 55th observation and calculate range , mean and standard deviation
+
+```{r}
+Auto_sample<-Auto[-c(5:55),]
+
+dim(Auto_sample)
+
+```
+
+After removing 5th to 55th observations, there are 341 rows and 9 columns in Auto data set.
+
+Now, let us calculate the range, mean and standard deviation of all the continuous variables in the new data set.
+
+```{r}
+{
+print(paste("mpg- Range:",list(range(Auto_sample$mpg)) ,"Mean:",mean(Auto_sample$mpg),"Standard Deviation",sd(Auto_sample$mpg)))
+print(paste("Displacement- Range:",list(range(Auto_sample$displacement)) ," Mean:",mean(Auto_sample$displacement),"Standard Deviation:",sd(Auto_sample$displacement)))
+print(paste("Horsepower- Range:",list(range(Auto_sample$horsepower)) ," Mean:",mean(Auto_sample$horsepower),"Standard Deviation:",sd(Auto_sample$horsepower)))
+print(paste("Weight- Range:",list(range(Auto_sample$weight)) ," Mean:",mean(Auto_sample$weight),"Standard Deviation:",sd(Auto_sample$weight)))
+print(paste("Acceleration- Range:",list(range(Auto_sample$acceleration)) ," Mean:",mean(Auto_sample$acceleration),"Standard Deviation:",sd(Auto_sample$acceleration)))
+}
+
+```
+
+### 2e - Removing columns or modifications to data set
+
+I would consider removing name column because name is not related to mpg or any of the features of the vehicle.
+
+The features like ‘Cylinders’ and ‘Origin’ are read as numeric, they are indeed factors as they take a few values. These have been converted to factor using the factor() function.
+
+```{r}
+Auto_new<-Auto[,-9]
+Auto_new$cylinders=as.factor(Auto_new$cylinders)
+Auto_new$origin=factor(Auto_new$origin)
+str(Auto_new)
+```
+
+Cylinders attribute is converted to factor with 5 levels whereas origin contains 3 levels.
+
+Now let us find if there are any outliers in the data set using box plots.
+
+```{r}
+Auto_trial<-Auto_new
+outliers_horsepower<-boxplot(Auto_trial$horsepower,plot=FALSE)$out
+outliers_horsepower
+Auto_trial<-Auto_trial[-which(Auto_trial$horsepower %in% outliers_horsepower),]
+```
+
+
+```{r}
+outliers_acceleration<-boxplot(Auto_trial$acceleration,plot=FALSE)$out
+outliers_acceleration
+Auto_trial<-Auto_trial[-which(Auto_trial$acceleration %in% outliers_acceleration),]
+```
+
+Horsepower and Acceleration contains few outliers and they are removed.
+
+Now let us compare the performance of the data before and after removing the outliers using lm() model.
+
+Let us fit a linear regression model before removing the outliers.
+
+### Linear model is fit without removing outliers.
+
+```{r}
+lm.fit=lm(mpg~.,data=Auto_new)
+summary(lm.fit)
+```
+
+The model with minimum Residual standard error and high R-squared value describes the best fit. Summary shows Residual standard error: 3.098 Adjusted R-squared:  0.8469  The predictors displacement,cylinders, weight, year and origin are significant with repsonse varibale ‘mpg’ as they have p-value <0.05
+
+Now let us fit a linear model after removing the outliers.
+
+### Linear model is fit after removing the outliers
+
+```{r}
+
+lm.fit2=lm(mpg~.,data=Auto_trial)
+summary(lm.fit2)
+```
+
+We now fit a Linear model after removing the outliers (boxplots of horsepower and acceleration shows outliers). Summary of linear fit shows that Residual standard error is 3.004 Adjusted R-squared is 0.8448.
+
+The model fit with and without outliers have similar Residual Standard Error and Multiple R –squared. So, I prefer model with outlier not removed as we may lose some valuable information given small dataset.
+
+### 2f- Exploratory Data Analysis
+
+```{r}
+library(lattice)
+xyplot(mpg~weight,data=Auto_new,xlab="Weight (lbs.)",ylab="Miles per Gallon (mpg)",type=c("p","r"),main="Scatter plot of mpg vs weight")
+```
+
+Here we can say that weight and mpg has a downward trend i.e as the weight of the car increases its mpg decreases.
+
+```{r}
+xyplot(mpg~acceleration,data=Auto_new,xlab="Acceleration",ylab="Miles per gallon",groups = cylinders,auto.key =list(space="right",title="# of cylinders",columns=2))
+```
+
+Here we can say that cylinder groups are well separated. 
+
+1. 8 cylinder cars have an acceleration below 15 and mpg below 20
+
+2. 6 cylinders cars have acceleration between 15-20 and mpg around 20
+
+3. most 4 cylinders cars have acceleration above 15 and mpg above 20
+
+3 and 5 cylinders cars have very few instances in our dataset and we cannot conclude their range.
+
+```{r}
+xyplot(Auto_new$horsepower~Auto_new$acceleration,xlab="Acceleration",ylab="Horsepower",type=c("p","r"),main="Scatter plot of Acceleration vs Horsepower")
+```
+
+Here we see a decreasing trend. Cars with high acceleration have less horsepower
+
+```{r}
+xyplot(Auto_new$acceleration~Auto_new$weight,groups =Auto_new$cylinders,xlab="Weight",ylab="Acceleration",main="Scatter plot of Acceleration vs weight",auto.key =list(space="right",title="Origin",columns=2))
+```
+
+Here we can say that cylinder groups are well separated. 
+
+1. 8 cylinder cars have an acceleration below 15 and weight above 3000
+
+2. 6 cylinders cars have acceleration between 15-20 and weight around 3000
+
+3. most 4 cylinders cars have acceleration above 15 and weight below 3000
+
+3 and 5 cylinders cars have very few instances in our dataset and we cannot conclude their range.
+
+```{r}
+xyplot(horsepower~displacement,data=Auto_new,xlab="Displacement",ylab="Horsepower",main="Scatter plot of Displacement vs Horsepower",auto.key = T)
+
+xyplot(weight~displacement,data=Auto_new,xlab="Displacement",ylab="Weight",main="Scatter plot of Weight vs Displacement")
+```
+
+Looking at the above graphs, we can observe that cars with higher displacement have more weight and acceleration.
+
+```{r scatterplot4}
+xyplot(mpg~horsepower,data=Auto_new,xlab="Horsepower",ylab="Miles per gallon",main="Plot of Horsepower vs mpg",groups = cylinders,auto.key =list(space="right",title="# of cylinders",columns=2))
+```
+
+Horsepower and mpg are highly correlated with each other and have a negative trend. Also cylinder groups are well separated.
+
+```{r}
+xyplot(mpg~displacement,data=Auto_new,xlab="Displacement",ylab="Miles per gallon",type=c("p","r"),columns=2,main="Plot of mpg vs displacement") 
+
+```
+
+Looking at the above graphs we can say that cars with higher displacement gives lower mpg. 
+
+### 2g - new variable "my_mpg"
+
+The goal is to create a new categorical variable my_mpg with levels low, medium and high. 
+
+The function quantile() with probs parameter divides the column mpg into quantiles based on their probabilities.
+
+```{r}
+quantile(Auto_new$mpg,probs = c(.33,.66))
+
+```
+
+From the output, we can observe that The column mpg is divided into 3 quantiles : below 18.503 mpg (assign it as low), above 26.6 mpg (~high) and between 18.503 and 26.600 (med).
+
+```{r}
+low<-Auto_new$mpg<18.503
+high<-Auto_new$mpg>26.6
+med<-(Auto_new$mpg>=18.503 & Auto_new$mpg<=26.6)
+
+```
+
+Now let us add a new column my_mpg to Auto data set.
+
+```{r}
+my_mpg<-"High"
+Auto_new1<-data.frame(Auto_new,my_mpg)
+Auto_new1$my_mpg[low]<-"low"
+Auto_new1$my_mpg[med]<-"med"
+Auto_new1$my_mpg[high]<-"high"
+Auto_new1$my_mpg<-factor(Auto_new1$my_mpg)
+```
+
+The values of the column my_mpg are set to {low,med,high} based on the value of the quantile and the column is converted to factor. 
+
+Now, let us save the data as .*RData file.
+
+```{r}
+save(Auto_new1,file="new_Auto.RData")
+```
+
+

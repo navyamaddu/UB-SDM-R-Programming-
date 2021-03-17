@@ -1,0 +1,405 @@
+---
+title: "Homework_2"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+	echo = TRUE,
+	message = FALSE,
+	warning = FALSE
+)
+```
+
+## Problem 1
+
+The goal is to fit a classification tree to the marketing data by first generating a reference sample size of the training set (i.e., Apply generalized association rules).
+
+```{r}
+setwd("/Volumes/Navya/UB/Sem-2/EAS-507/Homeworks/Homework_2")
+load("marketing.RData")
+```
+
+```{r}
+dim(marketing)
+Missing_values = ifelse(any(is.na(marketing)),"Marketing data contains missing values","There are no missing values in Marketing data set")
+Missing_values
+```
+
+Marketing data contains a total of N=8993 questionnaires containing 502 questions filled out by shopping mall customers in the San Francisco Bay area. It consists of 
+14 demographic attributes. The data set is a good mixture of categorical 
+and continuous variables with a lot of missing data. 
+
+```{r}
+head(marketing)
+```
+The head() function displays the first 6 rows of the data set. Some of the columns are Income, sex, Marital, Age, Edu, Occupation, Lived, Dual_income, Household.
+
+```{r}
+#marketing<-as.factor(marketing)
+str(marketing)
+```
+
+From the str() function, we observe that all the 14 columns are integers.
+
+```{r}
+summary(marketing)
+
+```
+
+The summary() function produces the numerical summary of the columns of the Marketing data set. The summary includes the Min value, 1st and 3rd Quantile values, Median , Mean and the Max values. We can observe that few columns like Marital, Education, Occupation, Lived, household, Status, Home_type, Ethnic, Language contains NA's.
+
+
+For applying generalized association rules, we need to generate reference sample of same size of the training set. Here, I have generated a reference sample by sampling uniformly for each variable.
+
+The column names of this reference set are set same as the column names of the marketing data.
+
+### Genearting a reference set
+
+```{r}
+ncol(marketing)
+set.seed(123)
+N = dim(marketing)[1]
+ref_store <- c()
+for (i in 1:14){
+	variable <- marketing[ ,i]
+	uni <- na.omit(unique(variable))
+	temp <- sample(uni, N, replace = TRUE)
+	ref_store <- cbind(ref_store, temp)
+}
+colnames(ref_store) <- colnames(marketing)[1:14]
+#ref_store
+
+```
+
+
+The columns sex and language are converted to factors given few levels and are labeled accordingly.
+
+### Alter the datatypes of variables
+
+```{r}
+unique(marketing$Sex)
+male <- which(marketing$Sex == 1)
+marketing$Sex[male] <- "Male"
+marketing$Sex[-male] <- "Female"
+marketing$Sex <- as.factor(marketing$Sex)
+na.omit(unique(marketing$Language))
+english<-which(marketing$Language==1)
+marketing$Language[english]<-"english"
+spanish<-which(marketing$Language==2)
+marketing$Language[spanish]<-"spanish"
+other<-which(marketing$Language==3)
+marketing$Language[other]<-"other"
+marketing$Language<-as.factor(marketing$Language)
+```
+
+
+### Combining the data and the reference set.
+
+
+Now the reference sample is combined to the marketing data using rbind().
+
+```{r}
+combined_marketing <- rbind(marketing[,1:14], ref_store)
+dim(combined_marketing)
+#View(combined_marketing)
+```
+
+We can observe that the combined data set contains 17986 rows. i.e., the data is doubled after adding the reference sample of same size to the marketing data set.
+
+### Creating a response variable
+
+Now we generate a response variable with class=1 for training data and class=0 for reference sample and the response variable is converted to factor.
+
+
+
+```{r}
+Y_data <- rep(1, N)
+Y_reference <- rep(0, N)
+YY <- c(Y_data, Y_reference)
+#View(response_Y)
+response_Y<-as.factor(YY)
+```
+
+The response variable is added to the marketing data and converted into factor.
+
+```{r}
+new_marketing<-cbind(combined_marketing,response_Y)
+dim(new_marketing)
+
+```
+
+We can observe that the dimensions of the new data is doubled after adding the reference data.
+
+### Fit a classification tree
+
+Now let us cast the problem from an unsupervised to supervised setting.
+
+Now let us fit a classification tree to the marketing data with the response variable Y (class labels)
+
+```{r}
+library(caret)
+library(tree)
+library(rpart)
+library(rpart.plot)
+set.seed(12)
+model.controls <- rpart.control(minbucket = 250, minsplit = 10, xval = 10, cp=0)
+fit_marketing <- rpart(response_Y~., data = new_marketing, control = model.controls)
+#summary(fit_marketing)
+rpart.plot(fit_marketing, uniform = T, compress = T,tweak=1.2)
+
+
+```
+
+The terminal nodes with highest class 1 probability are :
+
+1. Household18 >= 3, Household18 >=4, home_type >=2 (class 1 probability 0.62 i.e., 3%)
+
+That is, the number of persons in the household under 18 are more than 4 and the type of home is not "house".
+
+2. Household18 >=3,Household>=6, Home_type >=4 , Ethnic>7 (class 1 probability 0.73 i.e., 3% )
+
+That is, the number of persons in the household under 18 are greater than 3 and the number of persons in the household are greater than 6 and the home type is "other" and Ethnic is "Other"
+
+3. Household18>=3,Household>=6, Home_type >=4 , Ethnic<7,Lived>5.(class 1 probability 0.91 i.e., 9%)
+
+That is, the number of persons in the household under 18 are greater than 3 and the number of persons in the household are greater than 6 and the home type is "other" and Ethnic is "Other" and family lived IN THE SAN FRAN./OAKLAND/SAN JOSE AREA for more than 10 years.
+
+4. Household18>=3, Household>=6, Home_type >=4 , Ethnic<7,Lived>5,Age>=5, Marital>5 (class1 probability 0.88 i.e., 2%)
+
+That is, the number of persons in the household under 18 are greater than 3 and the number of persons in the household are greater than 6 and the home type is "other" and Ethnic is "Other" and family lived IN THE SAN FRAN./OAKLAND/SAN JOSE AREA for more than 10 years and the age above 45.
+
+By comparing the results derived using PRIM, the results are almost similar but the rules obtained from CART involved less columns while PRIM generated results using different columns and almost covered all the scenarios.
+
+
+## Problem 2
+
+The goal is to explore the Boston Housing data and apply Apriori Algorithm. Apriori algorithm requires the data to be converted into dummy schema by observing the histograms. The data is then converted to binary incidence matrix and the threshold is set on the confidence and lift of the item sets. Using this algorithm, we get many rules and we can filter them based on our requirement.
+
+Using Apriori algorithm, we can explore the relationships between the predictors.
+
+Let us explore the data before performing further analysis.
+
+```{r}
+library(MASS)
+data("Boston")
+```
+
+```{r}
+head(Boston)
+dim(Boston)
+
+```
+
+Boston Housing data contains 506 rows and 14 columns. The data represents the housing values of suburbs in Boston.  
+
+```{r}
+str(Boston)
+```
+
+The data types of all columns are numeric except ‘rad’ and ‘chas’, which are integers.
+
+```{r}
+summary(Boston)
+
+```
+
+From the summary statistics, we can observe that the minimum ptration(pupil to teacher ration in town) is 12.60 whereas the maximum is 22. The minimum per capita crime by town is 0.006 whereas the maximum is 88.976.
+
+```{r}
+Missing_values = ifelse(any(is.na(Boston)),"Boston data contains missing values","There are no missing values in Boston data set")
+Missing_values
+```
+
+There are no missing values or duplicate rows in the data set.
+
+### Problem 2a
+
+Let us plot the histograms of different variables and transform the data into binary incidence matrix.
+
+Here, we need to take subjective decisions to convert the variables into factors by plotting the histograms.
+
+The variables are grouped based on the frequency distribution. For the variable "crim", Splitting is done based on the number of data points in particular group and is divided into low crime , medium crime and high crime.
+
+```{r}
+hist(Boston[["crim"]])
+Boston[["crim"]] <- ordered(cut(Boston[["crim"]], c(0,20,60,80)), labels = c("Low crime", "Medium crime","High crime"))
+
+
+```
+
+
+
+```{r}
+hist(Boston[["dis"]])
+Boston[["dis"]] <- ordered(cut(Boston[["dis"]], c(0,3,6,9,12)), labels = c("very near", "near", "far","very far"))
+```
+
+The column "dis" which represents weighted mean of distances to five Boston employment centres is converted to ordinal variable with 4 levels-very near, near,far and very far.
+
+```{r}
+hist(Boston[["ptratio"]])
+Boston[["ptratio"]] <- ordered(cut(Boston[["ptratio"]], c(12,20,22)), labels = c("low ptratio","high ptratio"))
+
+```
+
+The column "ptratio" which represents pupil-teacher ratio is converted to ordinal variable with 2 levels-low ptratio and high ptratio.
+
+```{r}
+hist(Boston[["nox"]])
+Boston[["nox"]] <- ordered(cut(Boston[["nox"]], c(0.35,0.55,0.75,0.9)), labels = c("low","medium","high"))
+
+```
+
+The column "nox" which represents nitrogen oxides concentration is converted to ordinal variable with 3 levels-low,medium and high.
+
+```{r}
+hist(Boston[["medv"]])
+Boston[["medv"]] <- ordered(cut(Boston[["medv"]], c(5,20,35,50)), labels = c("low price","medium price","high price"))
+
+
+```
+
+The column "medv" which represents median value of owner-occupied homes in \$1000s is converted to ordinal variable with 3 levels-low price,medium price and high price.
+
+Similarly, all the variables are converted to ordinary variables by plotting the histograms.
+
+```{r}
+hist(Boston[["zn"]])
+Boston[["zn"]] <- ordered(cut(Boston[["zn"]], c(0,50,100)), labels = c("low residential land","high residential land"))
+
+
+hist(Boston[["indus"]])
+Boston[["indus"]] <- ordered(cut(Boston[["indus"]], c(0,12,25)), labels = c("less business acres ","more business acres"))
+
+
+hist(Boston[["tax"]])
+Boston[["tax"]] <- ordered(cut(Boston[["tax"]], c(150,350,550,700)), labels = c("low tax","medium tax","high tax"))
+
+
+hist(Boston[["lstat"]])
+Boston[["lstat"]] <- ordered(cut(Boston[["lstat"]], c(0,20,40)), labels = c("low percent of lower status population","high percent of lower status population"))
+
+
+```
+
+
+After viewing the histograms of other columns, they seem less important so they are not converted to ordinal variables.
+
+### Binary incidence matrix
+
+Now let us convert the data into binary incidence (i.e., recasting the data into 1's and 0's)
+
+```{r}
+library(arules)
+Boston_new <- as(Boston, "transactions")
+```
+
+
+```{r}
+summary(Boston_new)
+```
+
+From the summary of the binary incidence matrix, we can observe that the most frequent items are zn[0,100], chas[0,1], high ptratio, rad[4,7),tax=[403,711].
+
+### 2b  Item frequency plot
+
+Let us view the item frequency plot with support=0.05
+
+```{r}
+itemFrequencyPlot(Boston_new, support = 0.05, cex.names = 0.8)
+```
+
+The support is set to 0.05 to include more items in the rules.
+If the support is set to high number, we may miss some important rules/columns.
+
+Now, let us apply apriori algorithm to the Boston data with support 0.3 and confidence 0.7.
+If the thresholds of support and confidence are increased further , we get many redundant rules thereby the inference of rules become difficult.
+
+```{r}
+rules  <- apriori(Boston_new, parameter = list(support = 0.3, confidence = 0.7))
+summary(rules)
+```
+
+From the summary of the rules, we can observe a set of 1074 rules.
+
+### Problem 2c
+
+To advice a student who is interested in low crime area but wants to be as close to the city as possible (as measured by “dis”), we have to mine through the association rules and find the areas with low crime.
+
+```{r}
+rulesLowCrime <- subset(rules, subset = rhs %in% "crim=Low crime" & lift>1)
+rulesLowCrime
+```
+
+A set of 176 rules are obtained when mined through the rules with "Low crime" constraint .
+
+Let us inspect the top 10 rules based on lift. A higher lift value indicates high association between antecedent and consequent. Lift value of zero indicates that antecedent and consequent are independent.
+
+```{r}
+inspect(head(sort(rulesLowCrime, by = "lift"), n = 10))
+```
+
+Let us find the rules with dis="very near" since the student needs to be as close to the city as possible.
+
+```{r}
+rulesdistance <- subset(rules, subset = rhs %in% "dis=very near" & lift>1.1)
+rulesdistance
+```
+
+A set of 8 rules are obtained when mined through the rules with "very near distance" constraint
+
+```{r}
+inspect(head(sort(rulesdistance, by = "lift"), n = 10))
+```
+
+After inspecting the rules, we can say that the student who is interested in low crime area but wants to be as close to the city as possible (as measured by “dis”), chas "Charles river dummy variable" should be 1 and nox "nitrogen oxides concentration (parts per 10 million)" should be medium. 
+
+
+### Problem 2d
+
+To advice a family who needs a school with low pupil teacher ratio, we have to mine the association rules with low ptratio.
+
+```{r}
+rulesptratio <- subset(rules, subset = rhs %in% "ptratio=low ptratio")
+rulesptratio
+```
+
+A set of 112 rules are obtained when mined through the rules with "low ptratio" constraint
+
+```{r}
+inspect(head(sort(rulesptratio, by = "lift"), n = 3))
+```
+
+After inspecting the rules, we can say that the family who is interested in a school with low ptratio ,they should select a region with  low nox (nitrogen oxides concentration), low property tax(tax) and medv (median value of owner occupied homes) should be medium price.
+
+
+### Extra credit
+
+Let us Use a regression model to find a house near to school with low ptratio.
+
+Let us apply lm model to Boston data set with ptratio as the response variable
+
+```{r}
+data(Boston)
+lm.fit=lm(ptratio~.,data=Boston)
+summary(lm.fit)  
+
+```
+
+
+Since, we need ptratio to be low, we need to find the non-significant variables.
+
+From the linear regression summary, we can say that crim, chas, rm , age, dis, tax are less significant with the response variable "ptratio" with high p-value.
+
+Hence, we can say that the family should pay more attention to crim, chas, rm , age, dis, tax
+to find a house near to school with low ptratio.
+
+Apriori algorithm provides the easier interpretation but it is preferred only if we are interested in relationships between variables. It is used when we have large data sets. We can perform Exploratory data analysis and group the data accordingly to find the rules. 
+
+Regression is preferred when we are interested in knowing the significant predictors ie., which predictors are significant with the response variable. The coefficients values represent the importance of the predictor.
+
+
+
+
+
