@@ -1,0 +1,621 @@
+---
+title: "Homework_6"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+	echo = TRUE,
+	message = FALSE,
+	warning = FALSE
+)
+```
+
+## Problem 1
+
+The goal is to apply bagging, boosting, and random forests to a data set of my own. Here, i am considering Diabetes data set and performing the analysis.
+
+```{r}
+setwd("/Volumes/Navya/UB/EAS-506/Homework/Homework_6/")
+load("Diabetes.RData")
+#View(Diabetes)
+```
+
+Diabetes data set contains the blood chemistry measures of glucose tolerance and insulin in 145 non-obese adults and each adult is classified into subclinical (chemical) diabetic, overt diabetic and normal.
+
+Let us explore the data before making further analysis.
+
+```{r}
+dim(Diabetes)
+summary(Diabetes)
+head(Diabetes)
+```
+
+The data set contains 145 rows and 6 columns with response variable "Group". The summary statistics indicate that there are 76 adults classified as Normal , 36 are Chemical diabetic and 33 are classified as overt diabetic after analyzing the blood samples. The relative weights of all the adults are in the range 0.7 - 1.2.
+
+```{r}
+Missing_values = ifelse(any(is.na(Diabetes)),"Diabetes data contains missing values","There are no missing values in Diabetes data set")
+Missing_values
+```
+
+## Dividing into test and train
+
+```{r}
+set.seed(1)
+train = sample(1:nrow(Diabetes), nrow(Diabetes)*.80)
+Diabetes_train = Diabetes[train, ]
+Diabetes_test = Diabetes[-train, ]
+dim(Diabetes_train)
+dim(Diabetes_test)
+
+```
+
+## Random Forests
+
+Now let us apply an ensemble technique Ramdom Forest on the diabetes data set. We use random Forest() with n.tree = 10000 to produce 10000 trees.
+
+In randomForest, only a subset m of predictors are considered at each split thereby  decorrelating the trees and making the average of the resulting trees less variable and hence more reliable.
+
+We now fit randomforest() on the train data and make predictions on the test data. We consider m (mtry) = square root of p(predictors) for classification trees. Since, we have 5 predictors, we consider mtry=2. 
+
+```{r}
+library(randomForest)
+#View(pima_train)
+rf.fit.diabetes <- randomForest(group~., data = Diabetes_train, n.tree = 10000,mtry=2)
+summary(rf.fit.diabetes)
+y_hat_test <- predict(rf.fit.diabetes, newdata = Diabetes_test, type = "response")
+y_hat_test_dia <- as.numeric(y_hat_test)-1
+y_hat_train <- predict(rf.fit.diabetes, newdata = Diabetes_train, type = "response")
+y_hat_train_dia<-as.numeric(y_hat_train)-1
+```
+
+```{r}
+y_true_train_dia<-as.numeric(Diabetes_train$group)-1
+y_true_test_dia<-as.numeric(Diabetes_test$group)-1
+
+```
+
+```{r}
+print(paste("Train Error on Diabetes data(Random forest) :",mean(y_hat_train_dia!=y_true_train_dia)))
+print(paste("Test Error on Diabetes data (Random Forest):",mean(y_hat_test_dia!=y_true_test_dia))) 
+```
+
+The test error is 0.10 (10%) when random forests is applied on diabetes data set.
+
+## Bagging
+
+Now let us apply an ensemble technique Bagging on the diabetes data set. We use random Forest() with n.tree = 10000 to produce 10000 trees.
+
+Bagging is similar to random forest except the number of variables to be considered i.e., m. In bagging, we use all the p predictors instead of square root of p for random forest.
+
+We now fit randomforest() on the train data and make predictions on the test data. We consider m (mtry) = p (here we have 5 predictors) for classification trees. 
+
+```{r}
+bag.fit.diabetes <- randomForest(group~., data = Diabetes_train, n.tree = 10000,mtry=5)
+y_hat_test_bag <- predict(bag.fit.diabetes, newdata = Diabetes_test, type = "response")
+y_hat_test_dia_bag <- as.numeric(y_hat_test_bag)-1
+y_hat_train_bag <- predict(bag.fit.diabetes, newdata = Diabetes_train, type = "response")
+y_hat_train_dia_bag<-as.numeric(y_hat_train_bag)-1
+```
+
+
+```{r}
+print(paste("Train Error on Diabetes data(Bagging) :",mean(y_hat_train_dia_bag!=y_true_train_dia)))
+print(paste("Test Error on Diabetes data (Bagging):",mean(y_hat_test_dia_bag!=y_true_test_dia)))
+```
+
+The test error is 0.10(10%) when bagging is applied on diabetes data set.
+
+## Boosting
+
+Now let us perform boosting on diabetes train data and make predictions on the test data.
+
+We use gbm() with the distribution = "gaussian" and ntrees= 5000 indicating that we need 5000 trees. The parameter interaction depth limits the depth of the tree.
+
+We perform boosting with different shrinkage parameters and then find the mean squared error for different shrinkage parameters. The errors are obtained in the form of matrix (5000 x 4).
+
+```{r}
+library(gbm)
+
+shrink <- c(.1, .4, .6, .8)
+max_iter <- 5000
+store_error_dia <- c()
+store_error_train_dia<-c()
+for (i in 1:length(shrink)){
+	boost.fit <- gbm((as.numeric(group)-1)~., data = Diabetes_train, n.trees = max_iter, shrinkage = shrink[i],   interaction.depth = 3, distribution = "gaussian")
+	temp <- c()
+	temp_train<-c()
+	for (j in 1:max_iter){
+		y_hat <- predict(boost.fit, newdata  = Diabetes_test, n.trees = j, type = "response")
+		y_hat_train <- predict(boost.fit, newdata  = Diabetes_train, n.trees = j, type = "response")
+		misclass_boost <- sum(abs((as.numeric(Diabetes_test$group)-1) - y_hat))/length(y_hat)
+		misclass_boost_train <- sum(abs((as.numeric(Diabetes_train$group)-1) - y_hat_train))/length(y_hat_train)
+		temp <- c(temp, misclass_boost)
+		temp_train<-c(temp_train,misclass_boost_train)
+	}
+	store_error_dia <- cbind(store_error_dia, temp) # max_iter x length(shrink)
+	store_error_train_dia<-cbind(store_error_train_dia,temp_train)
+}
+
+colnames(store_error_dia) <- paste("shrinkage", shrink, sep = ":")
+colnames(store_error_train_dia) <- paste("shrinkage", shrink, sep = ":")
+```
+
+
+```{r}
+head(store_error_train_dia)
+store_error_train_dia[5000,]
+```
+
+The train mean-squared error is observed as 8.255131e-10 when boosting is applied on the Diabetes data with shrinkage parameter 0.8.
+
+```{r}
+head(store_error_dia)
+store_error_dia[5000,]
+```
+
+The mean-squared error is observed as 0.09330791(9%) when boosting is applied on the Diabetes data with shrinkage parameter 0.4.Hence, we can consider 0.4 to be the best shrinkage paramter value.
+
+Now let us plot the test error profiles.  
+
+```{r}
+plot(store_error_dia[,1], type = "l", main = "Error Profiles", ylab = "Test error", xlab = "boosting iterations")
+lines(store_error_dia[,2], col = "red")
+lines(store_error_dia[,3], col = "blue")
+lines(store_error_dia[,4], col = "green")
+```
+
+## Problem 1b
+
+## LDA
+
+Now let us apply a non- ensemble technique like LDA on the same test and train and test diabetes data set.
+
+```{r}
+set.seed(1)
+library(MASS)
+lda_fit_dia <- lda(group~., data = Diabetes_train)
+lda_pred_train_dia <- predict(lda_fit_dia, newdata = Diabetes_train)
+y_hat_train_dia <- as.numeric(lda_pred_train_dia$class)-1
+y_hat_train_dia
+```
+
+Now let us make predictions on the test Diabetes data using predict() function and the class labels for "group" are present in the class attribute of predict() output.
+
+```{r}
+lda_pred_test_dia <- predict(lda_fit_dia, newdata = Diabetes_test)
+y_hat_test_dia <- as.numeric(lda_pred_test_dia$class)-1
+#y_true_train_dia
+y_true_train_dia<-as.numeric(Diabetes_train$group)-1
+y_true_test_dia<-as.numeric(Diabetes_test$group)-1
+```
+
+Now let us calculate the mis-classification error rate for test and train Diabetes data set.
+
+```{r}
+print(paste("Train Error for LDA on Diabetes data :",mean(y_hat_train_dia!=y_true_train_dia)))
+print(paste("Test Error for LDA on Diabetes data :",mean(y_hat_test_dia!=y_true_test_dia))) 
+```
+
+The test Error rate when LDA is performed on the Diabetes data set is observed as 6% indicating that most of the groups are predicted correctly.
+
+```{r}
+library(caret)
+conf_lda<-confusionMatrix(factor(y_true_test_dia),factor(y_hat_test_dia))
+conf_lda
+```
+
+From the confusion matrix, we can observe that the accuracy is 93.1% when LDA is applied on the Diabetes data set. All the "normal" and " overt diabetic" are classified correctly while 2 "chemical diabetic" adult is classified incorrectly as "Normal".
+
+## Comparison of all models
+
+```{r}
+Model_names<-c("Random forest","Bagging","Boosting","LDA")
+train_error<-c("0%","0%","8.255131e-10%","10%")
+test_error<-c("10%","10%","9%","6%")
+d = list(Model_names,train_error,test_error)
+Comparison_table <- as.data.frame(d,col.names  = c("Model", "Train Error Rate","Test Error Rate"))
+Comparison_table
+```
+
+We can observe that the test error is low when simplistic model LDA is applied on Diabates data set compared to ensemble techniques like random forest, bagging and boosting.
+
+## Problem 1c
+
+Ensemble methods like Bagging, Boosting does not always perform better than traditional methods like LDA,KNN,Logistic Regression. If you have models like LDA with high variance (they over-fit your data), then bagging provides more accurate results. If the models are highly biased like linear regression, it is better to combine them using Boosting. 
+
+In the spam data, LDA performed better than traditional methods thus we can observe that over fitting is avoided. When ensemble methods like bagging and boosting are applied on spam data set, train error was zero indicating that the models are over fitting the data and hence the test error is increased.  
+
+Disadvantages of Ensemble methods:
+Ensemble methods are difficult to interpret and computationally expensive.
+Ensemble methods are more difficult to tune compared to traditional non-ensemble methods like LDA and Logistic regression.
+
+
+## Problem 2
+
+The goal is to perform boosting, random forests on pima data and compare the performance.
+
+Let us explore the data before performing furthur analysis.
+
+```{r}
+library(gbm)
+library(randomForest)
+library(tree)
+library(caret)
+```
+
+
+```{r}
+setwd("/Volumes/Navya/UB/EAS-506/Homework/Homework_6")
+load("pima.RData")
+head(pima)
+dim(pima)
+pima_old<-pima
+```
+
+Pima data set contains 532 rows and 9 columns. The objective of pima dataset is to  predict whether or not a patient has diabetes, based on certain diagnostic measurements included in the dataset. Several constraints were placed on the selection of these instances from a larger database. In particular, all patients here are females at least 21 years old of Pima Indian heritage.
+
+```{r}
+summary(pima_old)
+```
+
+From the summary statistics, we can observe that Women in age group 21 - 81 are considered for this analysis. The plasma glucose concentration is in the range 56 to 199. The predictor npregnant represents number of times pregnant and the range is in between 0 to 17.
+
+```{r}
+str(pima_old)
+
+```
+
+From the datatypes of the columns, we can say that bmi and pedigree are numerics while the remaining columns are integers.
+
+class digit and class are factors with 2 levels and contain same information so class digit can be removed since it contain redundant information.
+
+```{r}
+pima_new<-pima_old[,-8]
+#View(pima_new)
+```
+
+
+```{r}
+Missing_values = ifelse(any(is.na(pima_new)),"Pima data contains missing values","There are no missing values in pima data set")
+Missing_values
+```
+
+## Dividing into train and test
+
+Pima data is divided into train and test in the ratio 80:20.
+
+```{r}
+set.seed(1)
+test_indis <- sample(1:nrow(pima_new), .20*nrow(pima_new))
+pima_test <- pima_new[test_indis, ]
+pima_train <- pima_new[-test_indis, ]
+pima_test$class<-as.numeric(pima_test$class)-1
+pima_train$class<-as.numeric(pima_train$class)-1
+dim(pima_train)
+#View(pima_test)
+```
+
+
+Now let us perform boosting on pima train data and make predictions on the test data.
+
+We use gbm() with the distribution = "adaboost" and ntrees= 5000 indicating that we need 5000 trees. The parameter interaction depth limits the depth of the tree.
+
+We perform boosting with different shrinkage parameters and then find the mean squared error for different shrinkage parameters. The errors are obtained in the form of matrix (5000 x 4).
+
+## Boosting
+
+```{r}
+shrink <- c(.1, .4, .6, .8)
+max_iter <- 5000
+store_error <- c()
+for (i in 1:length(shrink)){
+	boost.fit <- gbm(class~., data = pima_train, n.trees = max_iter, shrinkage = shrink[i],   interaction.depth = 3, distribution = "adaboost")
+	temp <- c()
+	for (j in 1:max_iter){
+		y_hat <- predict(boost.fit, newdat = pima_test, n.trees = j, type = "response")
+		misclass_boost <- sum(abs(pima_test$class - y_hat))/length(y_hat)
+		temp <- c(temp, misclass_boost)
+	}
+	store_error <- cbind(store_error, temp) # max_iter x length(shrink)
+}
+
+colnames(store_error) <- paste("shrinkage", shrink, sep = ":")
+head(store_error)
+```
+
+We now plot the errors with boosting iterations (1-5000) for different shrinkage values.
+
+```{r}
+plot(store_error[,1], type = "l", main = "Error Profiles", ylab = "error", xlab = "boosting iterations",ylim=c(0.30,0.40))
+lines(store_error[,2], col = "red")
+lines(store_error[,3], col = "blue")
+lines(store_error[,4], col = "green")
+```
+
+
+```{r}
+store_error[5000,]
+```
+
+The mean-squared error is observed as 0.30(low) when boosting is applied on the pima data with shrinkage parameter 0.8.
+
+## Random Forests
+
+Now let us apply an ensemble technique Ramdom Forest on the pima data set. We use random Forest() with n.tree = 10000 to produce 10000 trees.
+
+In randomForest, only a subset m of predictors are considered at each split thereby  decorrelating the trees and making the average of the resulting trees less variable and hence more reliable.
+
+We now fit randomforest() on the train data and make predictions on the test data. We consider m (mtry) = square root of p(predictors) for classification trees. Since, we have 7 predictors, we consider mtry=2. 
+
+```{r}
+set.seed(1)
+#View(pima_train)
+rf.fit.pima <- randomForest(class~., data = pima_train, n.tree = 10000,mtry=2)
+y_hat_test <- predict(rf.fit.pima, newdata = pima_test, type = "response")
+y_hat_train <- predict(rf.fit.pima, newdata = pima_train, type = "response")
+
+
+```
+
+We now calculate the mis-classification error for train and test data.
+
+```{r}
+misclass_rf_train<-sum(abs(pima_train$class- y_hat_train))/length(y_hat_train)
+misclass_rf_test<-sum(abs(pima_test$class- y_hat_test))/length(y_hat_test)
+```
+
+```{r}
+print(paste("Mis-classification error rate on train pima data(Random Forest) :",misclass_rf_train))
+print(paste("Mis-classification error rate on test pima data(Random Forest) :",misclass_rf_test))
+```
+
+We observe that the error rate is 0.33(33%) when RandomForest is applied on test data indicating 33% of the data points are classified incorrectly.
+
+
+```{r}
+varImpPlot(rf.fit.pima)
+importance(rf.fit.pima)
+```
+
+Variable importance is computed using the mean decrease in Gini index.
+
+From the variable importance plot, we can say that column glucose has high MeanDecreaseGini indicating that the variable glucose and age are important.
+
+## Single tree (CART Model)
+
+```{r}
+tree.pima<-tree(class~.,data=pima_train)
+summary(tree.pima)
+
+```
+
+The number of terminal nodes used are 14 and the Residual mean deviance on the train data is observed as 0.104
+
+```{r}
+plot(tree.pima)
+text(tree.pima,pretty=0)
+```
+
+
+```{r}
+pima.pred<-predict(tree.pima,pima_test,type="vector")
+#pima.pred
+conf_pima<-confusionMatrix(factor(round(pima.pred)),factor(pima_test$class))
+conf_pima
+```
+
+From the confusion matrix, we can observe that the accuracy is 71.7% when pima predictions are done on pima test data.
+
+## Comparison of all models
+
+```{r}
+Model_names<-c("Boosting","Random Forest","Single tree")
+test_error<-c("29.3%","33.7%","28.3%")
+accuracy<-c("70.7%","66.3%","71.7%")
+d = list(Model_names,test_error,accuracy)
+Comparison_table <- as.data.frame(d,col.names  = c("Model","Test Error Rate","Accuracy"))
+Comparison_table
+
+```
+
+We can observe that the accuracy of Single tree (CART model) is high compared to Boosting and random Forests indicating that the predictions done using single tree are more accurate.
+
+## Partial dependence plots
+
+The partial dependence plot (short PDP or PD plot) shows the marginal effect one or two features have on the predicted outcome of a machine learning model. 
+
+From the variable importance plots in random forests, we observe that  glucose and age have high ranking variable importance.
+
+Now let us plot the partial dependence plots for the high ranking variables glucose and age.
+
+```{r}
+library(pdp)
+par(mfrow=c(1,2))
+glucose<- partial(rf.fit.pima, pred.var = c("glucose"), chull = TRUE)
+plot.glucose <- autoplot(glucose, contour = TRUE)
+age<- partial(rf.fit.pima, pred.var = c("age"), chull = TRUE)
+plot.age <- autoplot(age, contour = TRUE)
+bmi<- partial(rf.fit.pima, pred.var = c("bmi"), chull = TRUE)
+plot.bmi <- autoplot(bmi, contour = TRUE)
+pedigree<- partial(rf.fit.pima, pred.var = c("pedigree"), chull = TRUE)
+plot.pedigree <- autoplot(pedigree, contour = TRUE)
+grid.arrange(plot.glucose,plot.age,plot.bmi,plot.pedigree)
+
+```
+
+In the plot if there are more variation for any given predictor variable means the value of that variable affects the model quite alot but if the line is constant near zero it shows that variable has no affect on the model.
+
+Positive value on the y-axis means it has positive impact on predicting the correct class. 
+
+## Partial dependence plots with 2 high ranking variables glucose and age.
+
+```{r}
+par_2variables <- partial(rf.fit.pima, pred.var = c("glucose", "age"), chull = TRUE)
+plot_2variables<- autoplot(par_2variables, contour = TRUE, 
+               legend.title = "Partial\ndependence")
+plot_2variables
+```
+
+Similar to 1-variable partial dependence plots and the color represent the intensity of affect on model.
+
+## Problem 3
+
+
+```{r}
+setwd('/Volumes/Navya/UB/EAS-506/Homework/Homework_6')
+spam_data<-read.delim("spamdata.txt", header = FALSE, sep = " ",dec=".")
+dim(spam_data)
+```
+
+Spam data set contains 4601 rows and 58 columns. Each column represents different features of an email and the last column (response variable) indicates whether the email is considered spam or not.
+
+```{r}
+names(spam_data)[58]<-"Spam"
+
+```
+
+```{r}
+#str(spam_data)
+#summary(spam_data)
+head(spam_data)
+```
+
+The data types of most of columns are numerical and some of them are integers.
+The response variable is integer with 1's and 0's representing whether the email is spam or non-spam.
+
+The response 'Spam' can be converted to factor given two levels.
+
+```{r}
+spam_data$Spam<-as.factor(spam_data$Spam)
+```
+
+```{r}
+
+Missing_values = ifelse(any(is.na(spam_data)),"Spam data contains missing values","There are no missing values in Spam data set")
+Missing_values
+```
+
+Let us divide the data into train and test
+
+```{r}
+set.seed(1)
+train=sample(1:nrow(spam_data), nrow(spam_data)*0.8)
+spam_train=spam_data[train,]
+spam_test=spam_data [-train ,]
+dim(spam_train)
+#View(spam_train)
+dim(spam_test)
+```
+
+Now we apply random forest with mtry =7 (square root of 58) and make predictions on the test data.
+
+```{r}
+rf.fit <- randomForest(Spam~., data = spam_train, n.tree = 10000, mtry=7)
+y_hat_train<-rf.fit$predicted
+train_error<-mean(y_hat_train!=spam_train$Spam)
+y_hat_test <- predict(rf.fit, newdata = spam_test,type="response")
+test_error<-mean(y_hat_test!=spam_test$Spam)
+print(paste("Mis-classification error rate on test spam data(Random Forest) :",test_error))
+print(paste("Mis-classification error rate on train spam data(Random Forest) :",train_error))
+```
+
+Now let us compute the confusion matrix to find the number of emails predicted as spam and non spam.
+
+```{r}
+library(caret)
+confusionMatrix(y_hat_test,spam_test$Spam,positive = "1")
+```
+
+We observe that the accuracy is 95.3 % when random forests is applied on spam data set with mtry=square root of p. 328 spam mails and 550 non spam mails are predicted correctly, hence giving an accuracy of 95.33 %
+
+Now let us apply different values of mtry and compute the test errors.
+
+## Random Forests with different values of m
+
+## Test errors for various m values
+
+```{r}
+library(randomForest)
+set.seed(1)
+mtry <- c(1,3,5,7,9,11,13,15)
+store_error_rf<-c()
+for (i in seq(1,8)){
+  temp<-c()
+  rf.fit <- randomForest(Spam~., data = spam_train, n.tree = 10000, mtry=mtry[i])
+  y_hat_train <- predict(rf.fit, newdata = spam_train,type="response")
+  y_hat_test <- predict(rf.fit, newdata = spam_test,type="response")
+  train_error<-mean(y_hat_train!=spam_train$Spam)
+  temp<-c(temp,train_error)
+  store_error_rf <- cbind(store_error_rf, temp)
+}
+#store_error_rf
+colnames(store_error_rf) <- paste("mtry", mtry, sep = ":")
+store_error_rf
+```
+
+The test error for different values of m are calculated and we observe that the minimum test error(0.001358696) is obtained at m=15.
+
+Now let us plot the test error profiles.
+
+```{r}
+{plot(store_error_rf[1,], type = "l", main = "Error Profiles", ylab = "Test error", xlab = "Predictors to be considered at each split (m) ",xaxt="n")
+axis(1,at = seq(1,8,1),labels = seq(1,15,2),las=1)}
+```
+
+## OOB Error for different values of m.
+
+WE use tuneRF function from random forest library to plot the OOB errors. We use plot=TRUE to plot the out of bag error as a function of mtry. The parameter mtryStart represents the starting value of m to be considered and the  mtry will be inflated by the given value of StepFactor at each iteration. The parameter  ntreeTry represents number of trees used at each step.
+
+The parameter "improve" represents whether the improvement in OOB error is acceptable for the search to continue.
+
+```{r}
+set.seed(1)
+OOBerror<-tuneRF(x=spam_train[,-58],y=spam_train$Spam,mtryStart = 8,ntreeTry = 300,stepFactor = 1.5,improve = 0.01,trace = TRUE, plot = TRUE,importance=TRUE,nodesize=10,doBest = TRUE)
+#dim(spam_train[,-58])
+OOBerror
+
+```
+
+The OOB error for different values of m are plotted and we can observe that the OOB error is minimum(0.0052) at m=12
+
+## OOB error vs Number of trees for different values of m.
+
+```{r}
+
+rf.fit.1 <- randomForest(Spam~., data = spam_train, n.tree = 10000, mtry=7)
+rf.fit.2 <- randomForest(Spam~., data = spam_train, n.tree = 10000, mtry=8)
+rf.fit.3 <- randomForest(Spam~., data = spam_train, n.tree = 10000, mtry=9)
+plot(rf.fit.1$err.rate[,1],col="red",xlab = "Number of trees",ylab = "OOB Error")
+lines(rf.fit.2$err.rate[,1],col="blue")
+lines(rf.fit.3$err.rate[,1],col="green")
+legend("topright",c("m=7","m=8","m=9"),lty=c(1,1),lwd=c(2.5,2.5),col=c("blue","red","green"))
+
+```
+
+We can observe that OOB error is low as the number of trees are increasing and is almost constant after 200. The OOB errror is almost similar for the chosen range of m values.
+
+## OOB error and test error for various values of mtry :
+
+```{r}
+oob_error<-c()
+test_error<-c()
+for(mtry in 1:57)
+  {
+    rf.fit<-randomForest(Spam~.,data=spam_train,mtry=50,ntree=1000)
+    oob_error[mtry]<-rf.fit$err.rate[1000]
+    
+    y.pred<-predict(rf.fit,newdata = spam_test,type = "class")
+    
+    y_true_test<-spam_test$Spam
+    
+    test_error[mtry]<-with(spam_test,sum(abs(as.numeric(y_true_test)-as.numeric(y.pred)))/length(y.pred))
+    
+    cat(mtry,"")
+    
+    
+  }
+test_error
+oob_error
+```
+

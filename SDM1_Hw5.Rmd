@@ -1,0 +1,752 @@
+---
+title: "Homework_5"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+	echo = TRUE,
+	message = FALSE,
+	warning = FALSE
+)
+```
+
+## Problem 1
+
+The goal is to fit an appropriate size classification tree for the vehicle data.
+
+Let us explore the data before doing further analysis.
+
+```{r}
+library(tree)
+library(caret)
+```
+
+
+```{r}
+setwd("/Volumes/Navya/UB/EAS-506/Week_9/Homework_5")
+load("vehicle.RData")
+head(vehicle)
+dim(vehicle)
+vehicle_new<-vehicle
+#View(vehicle_new)
+```
+
+Vehicle data set contains 564 vehicles (divided into 4 classes) each with 20 features. 
+
+```{r}
+summary(vehicle_new)
+str(vehicle_new)
+```
+
+From the summary statistics of vehicle data, we can observe that there are 4 classes of vehicles i.e., bus, opel, saab, van and each of the class has a classdigit 1, 2, 3, 4 respectively. We can observe that the columns Comp, Circ, PrAxisAR, MaxLAR,  SradGyration, SkewMajAxis are normally distributed since mean and median are equal.
+
+
+```{r}
+Missing_values = ifelse(any(is.na(vehicle_new)),"Vehicle data contains missing values","There are no missing values in vehicle data set")
+Missing_values
+```
+
+First, let us fit a classification tree on the entire Vehicle data set.
+
+```{r}
+
+vehicle<-vehicle_new[,-19]
+dim(vehicle)
+#View(vehicle)
+```
+
+The column classdigit is redundant and hence it is removed.
+
+We now fit a classification tree on the vehicle data set using tree().
+
+```{r}
+tree.vehicle =tree(class~. ,vehicle )
+summary(tree.vehicle)
+
+```
+
+The summary statistics indicate the variables used in the tree construction, the number of terminal nodes (16) .
+
+The training Mis-classification error rate is observed as 23%. Residual mean deviance is observed as 0.9208. High deviance indicates that the tree does not provide good fit to the data.
+
+```{r}
+plot(tree.vehicle )
+text(tree.vehicle ,pretty =0)
+```
+
+
+```{r}
+tree.vehicle
+```
+
+In order to evaluate the performance of a classification tree, we must estimate test error rather than simply computing the training error .
+
+## Dividing into Train and test
+
+Now let us divide the data into train and test and calculate the train and test error rates.
+
+```{r}
+set.seed(12)
+train=sample(1:nrow(vehicle), nrow(vehicle)*0.8)
+vehicle.train=vehicle[train,]
+vehicle.test=vehicle [-train ,]
+#dim(vehicle.train)
+#dim(vehicle.test)
+```
+
+Now let us fit a tree on the train set and make predictions on the train and test vehicle data set.
+
+```{r}
+tree.vehicle1<-tree(class~.,data=vehicle.train)
+summary(tree.vehicle1)
+```
+
+From the summary, we can observe that the mis-classification rate for the train data is 18.63% i.e., out of 451 vehicles, 84 are predicted incorrectly.
+
+```{r}
+tree.pred.train<-predict(tree.vehicle1,vehicle.train,type="class")
+conf_tree_train<-confusionMatrix(tree.pred.train,vehicle.train[,19])
+conf_tree_train
+```
+
+From the confusion matrix, we observe that the accuracy is 80.93% when predictions are made on the train data. 
+
+Now let us make predictions on the test set and calculate the mis-classification error rate.
+
+```{r}
+tree.pred<-predict(tree.vehicle1,vehicle.test,type="class")
+#summary(tree.pred)
+conf_tree<-confusionMatrix(tree.pred,vehicle.test[,19])
+conf_tree
+
+```
+
+From the confusion matrix, we can observe that the accuracy obtained is 61.06% indicating that 61.06% are classified correctly i.e., 61.06 % of vehicles are classified correctly into respective nodes. We can observe that 44 out of 113 vehicles are classified incorrectly giving an error rate of 44/113=0.389 (38.9%)
+
+## Tree Pruning
+
+Now let us perform pruning and observe whether pruning the tree might lead to improved results.
+
+We perform cross validation in order to determine the optimal level of tree complexity using cv.tree().
+
+We use the argument FUN=prune.misclass in order to indicate that we want the classification error rate to guide the cross-validation and pruning process, rather than the default for the cv.tree() function, which is deviance. 
+
+```{r}
+set.seed(13)
+cv.vehicle =cv.tree(tree.vehicle1 ,FUN=prune.misclass )
+names(cv.vehicle )
+cv.vehicle
+```
+
+The cv.tree() function reports the number of terminal nodes of each tree considered (size) as well as the corresponding error rate (dev) and the value of the cost-complexity parameter used (k).
+
+Now let us plot the error rate (dev) for each value of tree size and k.
+
+```{r}
+plot(cv.vehicle$size ,cv.vehicle$dev ,type="b")
+plot(cv.vehicle$k ,cv.vehicle$dev ,type="b")
+```
+
+Now let us find the minimum error rate(deviance) and the tree size corresponding to the minimum error rate.
+
+```{r}
+print(paste("Minimum deviance obtained from cross-validation :",min(cv.vehicle$dev)))
+min_dev<-which.min(cv.vehicle$dev)
+best_tree<-cv.vehicle$size[min_dev]
+print(paste("Size of the tree with minimum error rate(Best Tree size) :",best_tree))
+```
+
+We can observe that the minimum deviance is 121 and the tree size corresponding to the minimum error rate is observed as 14.
+
+Now let us prune the tree with tree size 14 to obtain the 14-node tree.
+
+```{r}
+prune.vehicle=prune.misclass(tree.vehicle1,best=best_tree)
+plot(prune.vehicle )
+text(prune.vehicle,pretty=0)
+```
+
+Now let us apply predict() on the pruned tree with type="class" indicating that the predictions are done based on the classification error.
+
+```{r}
+prune.pred=predict(prune.vehicle,vehicle.test,type="class")
+confusionMatrix(prune.pred ,vehicle.test[,19])
+```
+
+From the confusion matrix, we observe that the accuracy is obtained as 64.6% which is high compared to the accuracy obtained without pruning the tree.
+
+We can observe that 40 out of 113 vehicles are classified incorrectly, hence the error rate is obtained as 40/113=0.353 (35.3%).
+
+## Comparison of complete tree and pruned tree
+
+```{r}
+Model_names<-c("Before Pruning ","Pruned tree")
+test_error<-c("38.9%","35.3%")
+accuracy<-c("61.06%","64.6%")
+d = list(Model_names,test_error,accuracy)
+Comparison_table <- as.data.frame(d,col.names  = c("Model","Test Error Rate","Accuracy"))
+Comparison_table
+```
+
+We can clearly say that pruning process has increased the accuracy (correctly classified the variables into respective nodes) thereby reducing the error rate. 
+
+## Problem 2
+
+```{r}
+library(leaps)
+```
+
+The goal is to perform best subset selection and to compute the AIC, BIC, five-and tenfold cross-validation, and bootstrap .632 estimates of prediction error on the prostate data.
+
+Let us explore the data before doing futhur analysis.
+ 
+```{r}
+setwd("/Volumes/Navya/UB/EAS-506/Week_9/Homework_5/")
+load("Prostate.RData")
+dim(prostate)
+```
+
+Prostate Data set contains 97 rows and 10 columns. The data represents the correlation between the level of prostate-specific antigen and a number of clinical measures in men who were about to receive a radical prostatectomy.
+
+```{r}
+str(prostate)
+summary(prostate)
+```
+
+From the summary statistics, we observe that the men with age group 41-79 are considered for the analysis. The response variable lpsa has a minimum of -0.4308 and a maximum of 5.5829.
+
+
+```{r}
+head(prostate)
+```
+
+The column ppg45 (percent of gleason score) can be removed since ppg45 is related to the gleason variable. 
+
+The train column is a logical vector indicating which observations should be included in the training set and test set. Hence, it can be removed while performing best subset selection.
+
+
+```{r}
+prostate_new <-prostate[,-c(8,10)]
+dim(prostate_new)
+```
+
+
+```{r}
+Missing_values = ifelse(any(is.na(prostate_new)),"Prostate data contains missing values","There are no missing values in Prostate data set")
+Missing_values
+```
+
+## Best Subset Selection
+
+Let us apply best subset selection on the prostate data set. For the in-sample methods like Cp, BIC and AIC, data can be considered as whole without dividing into train and test.
+
+```{r}
+best_subset<-regsubsets(lpsa~.,data=prostate_new,nvmax=7,nbest=1,method="exhaustive")
+summary<-summary(best_subset)
+summary(best_subset)$outmat
+```
+
+Exhaustive subset selection is performed on Prostate training data with lpsa as response variable using regsubsets() with method=exhaustive. The summary() statistics provide the best set of variables for each model size having minimum Residual Standard Error and maximum R-squared.
+
+```{r}
+summary$rsq
+plot(summary$rsq,xlab="Subset size",ylab="R-Squared",type="b")
+```
+
+We can observe that R-squared statistic is increasing gradually from 53% when only one variable is included in the model to 65% when all the 7 variables are included in the model. 
+
+```{r}
+summary$rss
+plot(summary$rss,xlab="Subset size",ylab="RSS",type="b")
+```
+
+Residual Sum of squares is high(58.9) for one variable model and  reduced to (~43.5) when all the 7 variables are included in the model.
+
+## AIC and BIC
+
+Let us calculate the minimum BIC and Cp(~AIC) from the summary statistics.
+
+```{r}
+summary$cp
+summary$bic
+
+min_cp<-which.min(summary$cp)
+min_bic<-which.min(summary$bic)
+
+print(paste("Best predictor model according to Cp(Min.Cp):",min_cp))
+print(paste("Best predictor model according to BIC(Min.BIC):",min_bic))
+
+```
+
+The model having minimum BIC and Cp can be considered as the best model. We can observe that the minimum Cp (5.537) is obtained for 5 variable model and the minimum BIC (-51.29578) is obtained for 3 variable model.
+
+Now let us plot BIC and Cp for each subset size and highlight the model with minimum BIC and Cp.
+
+```{r}
+par(mfrow=c(1,2))
+plot(summary$cp ,xlab="Number of Variables ",
+ylab="Cp",type="l")
+points(min_cp,summary$cp[min_cp],col="red",pch=20)
+
+plot(summary$bic ,xlab="Number of Variables ",
+ylab="BIC",type="l")
+points(min_bic,summary$bic[min_bic],col="red",pch=20)
+```
+
+From the above plots, we can say that we can conclude that 5 predictor and 3 predictor models have best Cp and BIC respectively.
+
+```{r}
+coef(best_subset,which.min(summary$bic))
+```
+
+The 3-variable model obtained from min.BIC includes the predictors lcavol,lweight and svi.
+
+## 5-fold Cross Validation
+
+Let us write a predict function for regsubsets since there is no in-built fucntion avaible.
+
+```{r}
+predict.regsubsets = function (object ,newdata ,id ,...){
+ form=as.formula(object$call [[2]])
+ mat=model.matrix(form,newdata)
+ coefi=coef(object ,id=id)
+ xvars=names(coefi)
+ mat[,xvars]%*%coefi 
+ }
+```
+
+Let us perform 5-fold CV by dividing the data into 5 folds, with each single fold as test set and remaining 4 folds as train set repeating the process 5 times.
+
+We then obtain a 5x7 matrix of cross validated errors.
+
+```{r}
+k = 5
+set.seed(1)
+p = ncol(prostate_new) - 1
+folds = sample(1:k,nrow(prostate_new),replace = TRUE)
+cv.errors.5 = matrix(NA, k, 7)
+
+for (i in 1:k) {
+    best.fit = regsubsets(lpsa~., data = prostate_new[folds!= i,], nvmax = 7)
+    for (j in 1:7) {
+        pred = predict.regsubsets(best.fit, prostate_new[folds==i, ], id = j)
+        cv.errors.5[i, j] = mean((prostate_new$lpsa[folds == i] - pred)^2)
+      
+    }
+}
+cv.errors.5
+```
+
+Let us plot the mean cross validated errors for each variable model.
+
+```{r}
+mean_cv.errors.5<-apply(cv.errors.5,2,mean)
+print(paste("Best predictor model obtained from 5-fold CV(min CV error)):",which.min(mean_cv.errors.5)))
+```
+
+The minimum cross validated error is obtained for 3 variable model when 5-fold CV is applied.
+
+```{r}
+plot(1:7,mean_cv.errors.5,ylim=c(0.4,0.8),type='b',xlab="Number of variables",ylab="MSE",main = "5-fold Cross validation")
+```
+
+## 10-fold Cross Validation
+
+Let us perform 10-fold CV by dividing the data into 10 folds, with each single fold as test set and remaining 9 folds as train set repeating the process 10 times.
+
+We then obtain a 10x7 matrix of cross validated errors.
+
+
+```{r}
+k = 10
+set.seed(1)
+p = ncol(prostate_new) - 1
+folds = sample(1:k,nrow(prostate_new),replace = TRUE)
+cv.errors.10 = matrix(NA, k, 7)
+
+for (i in 1:k) {
+    best.fit = regsubsets(lpsa~., data = prostate_new[folds!= i,], nvmax = 7)
+    for (j in 1:7) {
+        pred = predict.regsubsets(best.fit, prostate_new[folds==i, ], id = j)
+        cv.errors.10[i, j] = mean((prostate_new$lpsa[folds == i] - pred)^2)
+      
+    }
+}
+cv.errors.10
+```
+
+
+```{r}
+mean_cv.errors.10<-apply(cv.errors.10,2,mean)
+print(paste("Best predictor model obtained from 10-fold CV(min CV error)):",which.min(mean_cv.errors.10)))
+```
+
+The minimum cross validated error is obtained for 3 variable model when 10-fold CV is applied.
+
+```{r}
+plot(1:7,mean_cv.errors.10,ylim=c(0.4,0.8),type='b',xlab="NUmber of variables",ylab="MSE",main = "10-fold Cross validation")
+```
+
+From both 5 and 10 fold CV, we can observe that the 3-variable model have the min CV error , hence 3 variable model can be considered as best according to 5 and 10 fold CV.
+
+
+## 0.632 Boostrap Estimates
+
+Let us find the bootstrap estimates for the prostate data by using bootpred() with nboot=500 (the bootstrap replications to be considered).
+
+```{r}
+library(bootstrap)
+library(boot)
+
+beta.fit <- function(X,Y){
+  lsfit(X,Y)
+  }
+beta.predict <- function(fit, X){
+  cbind(1,X)%*%fit$coef
+}
+
+sq.err <- function(Y,Yhat){
+  (Y-Yhat)^2
+}
+
+X <- prostate_new[,1:7]
+Y <- prostate_new[,8]
+
+select = summary$outmat
+bootstrap_error <- c()
+for (i in 1:7){
+  
+  temp <- which(select[i,] == "*")
+  res <- bootpred(X[,temp], Y, nboot = 500, beta.fit, beta.predict, sq.err) 
+  bootstrap_error <- c(bootstrap_error, res[[3]])
+  
+}
+```
+
+
+```{r}
+bootstrap_error
+print(paste("Best Model with minimum booststrap error :",which.min(bootstrap_error)))
+
+```
+
+We can observe that min bootstrap error(0.5221257) is obtained for 5 variable model.
+
+```{r}
+Model_names<-c("Cp","BIC","5-fold CV","10-fold CV", "Bootstrap 0.632 estimates")
+Best_model<-c(5,3,3,3,5)
+d = list(Model_names,Best_model)
+Comparison_table <- as.data.frame(d,col.names  = c("Algorithm", "Best_model")) 
+Comparison_table
+```
+
+From all the above models, we can consider 3-5 variables models as best compared to complete 7-predictor model.
+
+## Problem 3
+
+
+```{r}
+library(tree)
+library(caret)
+library(MASS)
+library(randomForest)
+```
+
+The goal is to construct an appropriate size classification tree, apply an ensemble technique (random forest or boosting) and applying LDA on wine data set and compare all the models.
+
+Let us explore the data before doing futhur analysis.
+
+```{r}
+setwd("/Volumes/Navya/UB/EAS-506/Week_9/Homework_5")
+wine_data<-read.delim("wine.data.txt", header = FALSE, sep = ",", dec = ".")
+head(wine_data)
+```
+
+
+```{r}
+dim(wine_data)
+```
+
+Wine data set from UCI Machine Learning Repository are the results of a chemical analysis of 178 wines grown over the decade 1970-1979 in the same region of Italy, but derived from three different cultivars (Barolo, Grignolino, Barbera). The analysis determined the quantities MalicAcid, Ash, AlcAsh, Mg, Phenols, Proa, Color, Hue, OD, and Proline. 
+
+
+```{r}
+names(wine_data)[1]<-"Wine"
+str(wine_data)
+```
+
+The first column Wine(V1) which is 1,2,3 represents the wine classes (Barolo, Grignolino, Barbera) respectively, hence it can converted to factor.
+
+```{r}
+wine_data$Wine<-as.factor(wine_data$Wine)
+summary(wine_data)
+```
+
+From the summary, we can observe that there are 50 Barolo wines, 71 Grignolino wines, and 48 Barbera wines.
+
+```{r}
+Missing_values = ifelse(any(is.na(wine_data)),"Wine data contains missing values","There are no missing values in Wine data set")
+Missing_values
+```
+
+## Confusion Matrix
+
+Let us divide the data into train and test and construct a classification tree on the training set and make predictions on the test set.
+
+```{r}
+set.seed(1)
+train=sample(1:nrow(wine_data), nrow(wine_data)*0.8)
+wine_train=wine_data[train,]
+wine_test=wine_data [-train ,]
+#dim(wine_train)
+#dim(wine_test)
+```
+
+```{r}
+tree.wine<-tree(Wine~.,data=wine_train)
+summary(tree.wine)
+```
+
+The number of terminal nodes used are 7 and the mis-classification error rate on the train data is just 2.8% indicating the model performed well on the train data set.
+
+```{r}
+wine.pred.train<-predict(tree.wine,wine_train,type="class")
+conf_wine_train<-confusionMatrix(wine.pred.train,wine_train$Wine)
+conf_wine_train
+```
+
+From the confusion matrix, we can observe that the accuracy is 97.18% when predictions are made on the train data. All the Barbera wines are classified correctly where as 1 Barolo wine and 3 Grignolino are classified incorrectly.
+
+Now let us make predictions on the test data set and calculate the mis-classification error rate.
+
+```{r}
+wine.pred.test<-predict(tree.wine,wine_test,type="class")
+#summary(tree.pred)
+conf_wine_test<-confusionMatrix(wine.pred.test,wine_test$Wine)
+conf_wine_test
+```
+
+From the confusion matrix, we can observe that the accuracy is 94.4% when predictions are made on the test data. All Barbera wines are classified correctly to its repective nodes while 1 Barolo is classified incorrectly as Grignolino and 1 Grignolino is classified incorrectly to Barolo node.
+
+## Tree pruning to find the appropriate size classification tree.
+
+Now let us perform pruning and observe whether pruning the tree might lead to improved results.
+
+We perform cross validation in order to determine the optimal level of tree complexity using cv.tree().
+
+We use the argument FUN=prune.misclass in order to indicate that we want the classification error rate to guide the cross-validation and pruning process, rather than the default for the cv.tree() function, which is deviance. 
+
+```{r}
+set.seed(1)
+cv.wine=cv.tree(tree.wine,FUN=prune.misclass )
+names(cv.wine)
+cv.wine
+```
+
+The cv.tree() function reports the number of terminal nodes of each tree considered (size) as well as the corresponding error rate (dev) and the value of the cost-complexity parameter used (k).
+
+Now let us plot the error rate (dev) for each value of tree size and k.
+
+```{r}
+plot(cv.wine$size,cv.wine$dev ,type="b")
+plot(cv.wine$k ,cv.wine$dev ,type="b")
+```
+
+Now let us find the minimum error rate (deviance) and the tree size corresponding to the minimum error rate.
+
+```{r}
+print(paste("Minimum deviance obtained from cross-validation :",min(cv.wine$dev)))
+min_dev<-which.min(cv.wine$dev)
+best_tree_wine<-cv.wine$size[min_dev]
+print(paste("Size of the tree with minimum error rate(Best Tree size) :",best_tree_wine))
+```
+
+We can observe that the minimum deviance is 13 and the tree size corresponding to the minimum error rate is observed as 7.
+
+Now let us prune the tree with tree size 7 to obtain the 7-node tree.
+
+```{r}
+prune.wine=prune.misclass(tree.wine,best=best_tree_wine)
+plot(prune.wine)
+text(prune.wine,pretty=0)
+```
+
+
+Now let us apply predict() on the pruned tree to evaluate its performance
+
+```{r}
+prune.pred.wine=predict(prune.wine,wine_test,type="class")
+confusionMatrix(prune.pred.wine ,wine_test$Wine)
+```
+
+
+From the confusion matrix, we can observe that the accuracy is 94.44% when predictions are done on the test data of pruned tree.
+
+```{r}
+Model_names<-c("Before Pruning ","Pruned tree")
+test_error<-c("5.56%","5.56%")
+accuracy<-c("94.44%","94.44%")
+d = list(Model_names,test_error,accuracy)
+Comparison_table <- as.data.frame(d,col.names  = c("Model","Test Error Rate","Accuracy"))
+Comparison_table
+```
+
+We can clearly observe that the pruned tree didnot provide any improved results when compared to complete tree.
+
+## Random Forest
+
+Now let us apply an ensemble technique RamdomForest on the wine data set. We use randomForest() with n.tree = 10000 to produce 10000 trees.
+
+In randomForest, only a subset m of predictors are considered at each split thereby  decorrelating the trees and making the average of the resulting trees less variable and hence more reliable.
+
+We now fit randomforest() on the train data and make predictions on the test data. We consider m (mtry) = square root of p(predictors) for classification trees. Since, we have 13 predictors, we consider mtry=4.
+
+```{r}
+set.seed(1)
+rf.fit <- randomForest(Wine~., data = wine_train, n.tree = 10000, mtry=4)
+y_hat_train <- predict(rf.fit, newdata = wine_train)
+y_hat <- predict(rf.fit, newdata = wine_test)
+```
+
+
+```{r}
+
+print(paste("Mis-classification error rate on train Wine data(Random Forest) :",mean(as.numeric(y_hat_train)!=wine_train$Wine)))
+print(paste("Mis-classification error rate on test Wine data(Random Forest) :",mean(as.numeric(y_hat)!=wine_test$Wine)))
+```
+
+We observe that the error rate is zero when RandomForest is applied on train and test data indicating all the data points are classified correctly.
+
+```{r}
+varImpPlot(rf.fit)
+importance(rf.fit)
+```
+
+Variable importance is computed using the mean decrease in Gini index.
+
+From the variable importance plot, we can say that column V2 has high MeanDecreaseGini indicating that V2 is important.
+
+## Comparison of pruned tree vs RandomForest
+
+```{r}
+Model_names<-c("Pruned Tree ","Random Forest")
+test_error<-c("5.6%","0%")
+accuracy<-c("94.4%","100%")
+d = list(Model_names,test_error,accuracy)
+Comparison_table <- as.data.frame(d,col.names  = c("Model","Test Error Rate","Accuracy"))
+Comparison_table
+```
+We can observe that the Random Forest performed well on the wine data set since its accuracy is 100%. Using random Forests can decorrelate the trees thereby we can observe reduction in variance.
+
+## Problem 3b
+
+## Linear Discriminant Analysis
+
+Now let us perform Linear Discriminant Analysis (LDA) on the train Wine data and make the predictions for train and test data.
+
+```{r}
+lda_fit_wine <- lda(Wine~., data = wine_train)
+lda_pred_train_wine <- predict(lda_fit_wine, newdata = wine_train)
+lda_pred_test_wine <-predict(lda_fit_wine,newdata=wine_test)
+```
+
+The predictions are made using predict() function and the class labels for "Wine" are present in the class attribute of predict() output and are accessed using $class.
+
+Now let us calculate the mis-classification error rate for test and train Wine data set.
+
+```{r}
+print(paste("Train Error for LDA on Wine data :",mean(lda_pred_train_wine$class!=wine_train$Wine)))
+print(paste("Test Error for LDA on Wine data :",mean(lda_pred_test_wine$class!=wine_test$Wine))) 
+```
+
+The test Error rate when LDA is performed on the Wine data set is observed as 0% indicating that all the wines are predicted correctly.
+
+```{r}
+conf_lda<-confusionMatrix(lda_pred_test_wine$class,wine_test$Wine)
+conf_lda
+```
+
+From the confusion matrix, we observe that the accuracy is 100% indicating all the wines(Barolo, Grignolino, Barbera) are classified correctly.
+
+## Comparison with part A.
+
+```{r}
+Model_names<-c("Pruned Tree ","Random Forest","LDA")
+test_error<-c("5.6%","0%","0%")
+accuracy<-c("94.4%","100%","100%")
+d = list(Model_names,test_error,accuracy)
+Comparison_table <- as.data.frame(d,col.names  = c("Model","Test Error Rate","Accuracy"))
+Comparison_table
+```
+
+We can observe the accuracy is 100% when LDA and Random forests are applied on the wine data set indicating that all wines are classified correctly into their respective nodes.
+
+## Problem 4
+
+The goal is to apply suitable algorithm to cover type data set to predict the forest cover type.
+
+```{r}
+setwd("/Volumes/Navya/UB/EAS-506/Week_9/Homework_5")
+load("covertype.RData")
+head(covertype)
+#str(covertype)
+dim(covertype)
+```
+
+There are 581,012 observations (each a 30x30 meter cell) on 54 input variables (10 quantitative variables, 4 binary wilderness areas, and 40 binary soil type variables).
+
+The last column V55 is the response variable indicating the forest cover type.
+Forest Cover Types:	
+    1 - Spruce/Fir, 2 - Lodgepole Pine, 3 - Ponderosa Pine, 4 - Cottonwood/Willow, 5 - Aspen, 6 - Douglas-fir, 7 - Krummholz
+    
+Let us convert the column to factor given few levels.
+
+```{r}
+names(covertype)[55]<-"foresttype"
+covertype$foresttype<-factor(covertype$foresttype)
+
+```
+
+
+```{r}
+Missing_values = ifelse(any(is.na(covertype)),"Forest Cover type data contains missing values","There are no missing values in Forest Cover type data set")
+Missing_values
+```
+
+Let us divide the data into train and test in the ratio 80:20 before doing further analysis.
+
+```{r}
+set.seed(1)
+train=sample(1:nrow(covertype), nrow(covertype)*0.8)
+covertype_train=covertype[train,]
+covertype_test=covertype[-train ,]
+#dim(covertype_train)
+#dim(covertype_test)
+```
+
+
+```{r}
+lda_fit <- lda(foresttype~., data = covertype_train)
+lda_pred_train <- predict(lda_fit, newdata = covertype_train)
+lda_pred_test <- predict(lda_fit, newdata = covertype_test)
+```
+
+
+```{r}
+print(paste("Train Error for LDA on cover type data :",mean(lda_pred_train$class!=covertype_train$foresttype)))
+print(paste("Test Error for LDA on cover type data :",mean(lda_pred_test$class!=covertype_test$foresttype))) 
+```
+
+We can observe that the test error is 32% when LDA is performed on cover type data set.
+
+```{r}
+conf_lda<-confusionMatrix(covertype_test$foresttype,lda_pred_test$class)
+conf_lda
+```
+
+From the confusion matrix, we can see that the accuracy is 67.9% when LDA is performed on Cover type data set indicating that 67.9% of the data points are classified correctly. 
+
+
+
+

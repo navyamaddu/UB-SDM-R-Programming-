@@ -1,0 +1,502 @@
+---
+title: "Homework_4"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+	echo = TRUE,
+	message = FALSE,
+	warning = FALSE
+)
+```
+
+## Problem 1
+
+The goal is to produce pairwise scatter plots for all the five variables of Diabates data set and to apply LDA and QDA and compare them.
+
+```{r}
+library(car)
+library(ISLR)
+library(leaps)
+library(caret)
+library(class)
+library(MASS)
+library(ggplot2)
+library(corrplot)
+```
+
+
+```{r}
+setwd("/Volumes/Navya/UB/EAS-506/Week_7/Homework_4/sailaksh")
+load("Diabetes.RData")
+names(Diabetes)
+
+```
+
+Diabetes data set contains the blood chemistry measures of glucose tolerance and insulin in 145 non-obese adults and each adult is classified into subclinical (chemical) diabetic, overt diabetic and normal.
+
+Let us explore the data before making pairwise scatter plots.
+
+```{r}
+dim(Diabetes)
+summary(Diabetes)
+head(Diabetes)
+```
+
+The data set contains 145 rows and 6 columns with response variable "Group". The summary statistics indicate that there are 76 adults classified as Normal , 36 are Chemical diabetic and 33 are classified as overt diabetic after analyzing the blood samples. The relative weights of all the adults are in the range 0.7 - 1.2.
+
+```{r}
+Missing_values = ifelse(any(is.na(Diabetes)),"Diabetes data contains missing values","There are no missing values in Diabetes data set")
+Missing_values
+```
+
+## 1a - Pairwise scatterplots
+
+```{r}
+
+scatterplotMatrix(Diabetes[1:5])
+
+```
+
+
+From the graphs, we can observe that glutest and glufast are positively correlated with each other. Similarly, glutest and sspg have some correlation with each other while Instest is negatively correlated with glutest and glufast.
+
+A variable is said to be Multi-variate normal if it follows a normal distribution. From the scatterplotMatrix, we can observe that the variables are slightly skewed towards left, hence they are not normally distributed indicating that the classes may not have multivariate normal pattern. The summary statistics also indicate that the mean and median of the variables are different, hence they are not normally distributed.
+
+```{r}
+corrplot(cor(Diabetes[,1:5]))
+```
+
+From the correlation plot, we can observe that glutest and glufast are positively correlated with each other while glufast and relwt have zero correlation.
+
+```{r}
+
+cor(Diabetes[,1:5])
+
+```
+
+In the correlation plot(Matrix form), high positive values indicate high correlation between variables, whereas high negative values indicate that the variables are negatively correlated.
+
+Whereas,covariance signifies the direction of the linear relationship between the two variables. It only measures how two variables change together, not the dependency of one variable on another one.
+
+Now let us observe the covariance matrices for the three classes.
+
+```{r}
+cov(Diabetes[as.numeric(Diabetes$group)==1,c(1:5)])
+cov(Diabetes[as.numeric(Diabetes$group)==2,c(1:5)])
+cov(Diabetes[as.numeric(Diabetes$group)==3,c(1:5)])
+```
+
+
+We can say that the classes have different co-variance matrices if the classes are well separated. Let us plot pairwise scatter-plots to observe the division of classes.
+
+
+```{r}
+plot1<-function(data,name1,name2,bottom){
+  x<-enquo(name1)
+  y<-enquo(name2)
+  g<-ggplot(data)+geom_point(aes(!!x,!!y,shape=group,colour = group)) + theme(legend.position = bottom) 
+  return(g)
+ 
+}
+```
+
+
+```{r}
+library(gridExtra)
+a<-plot1(Diabetes,relwt,glufast,"top")
+b<-plot1(Diabetes,relwt,glutest,"none")
+c<-plot1(Diabetes,relwt,instest,"none")
+d<-plot1(Diabetes,relwt,sspg,"none")
+grid.arrange(a,b,c,d,nrow=2,ncol=2)
+```
+
+
+```{r}
+a1<-plot1(Diabetes,glufast,glutest,"top")
+b1<-plot1(Diabetes,glufast,instest,"none")
+c1<-plot1(Diabetes,glufast,sspg,"none")
+d1<-plot1(Diabetes,glutest,instest,"none")
+grid.arrange(a1,b1,c1,d1,nrow=2,ncol=2)
+```
+
+
+```{r}
+a2<-plot1(Diabetes,glutest,sspg,"top")
+b2<-plot1(Diabetes,instest,sspg,"none")
+grid.arrange(a2,b2,ncol=2)
+```
+
+We can say that the variables Relative weight(relwt) and glucose test/intolerence have different co-variance matrices since the classes are well separated.
+
+The classes are well separated in glutest vs glufast and glutest vs instest indicating that the variables have different covariance matrices.
+
+
+## 1b- LDA and QDA
+
+Let us divide the data into train and test in the ration 80:20.
+
+```{r}
+set.seed(1)
+train = sample(1:nrow(Diabetes), nrow(Diabetes)*.80)
+Diabetes_train = Diabetes[train, ]
+Diabetes_test = Diabetes[-train, ]
+dim(Diabetes_train)
+dim(Diabetes_test)
+```
+
+Now let us convert the response variable "group" from factor to numeric.
+
+```{r}
+y_true_train_dia<-as.numeric(Diabetes_train$group)-1
+y_true_test_dia<-as.numeric(Diabetes_test$group)-1
+```
+
+Now let us perform Linear Discriminant Analysis (LDA) on the train Diabetes data and make the predictions for train and test data.
+
+## LDA
+
+```{r}
+lda_fit_dia <- lda(group~., data = Diabetes_train)
+lda_pred_train_dia <- predict(lda_fit_dia, newdata = Diabetes_train)
+y_hat_train_dia <- as.numeric(lda_pred_train_dia$class)-1
+```
+
+Now let us make predictions on the test Diabetes data using predict() function and the class labels for "group" are present in the class attribute of predict() output.
+
+```{r}
+lda_pred_test_dia <- predict(lda_fit_dia, newdata = Diabetes_test)
+y_hat_test_dia <- as.numeric(lda_pred_test_dia$class)-1
+```
+
+Now let us calculate the mis-classification error rate for test and train Diabetes data set.
+
+```{r}
+print(paste("Train Error for LDA on Diabetes data :",mean(y_hat_train_dia!=y_true_train_dia)))
+print(paste("Test Error for LDA on Diabetes data :",mean(y_hat_test_dia!=y_true_test_dia))) 
+```
+
+The test Error rate when LDA is performed on the Diabetes data set is observed as 6% indicating that most of the groups are predicted correctly.
+
+```{r}
+conf_lda<-confusionMatrix(factor(y_true_test_dia),factor(y_hat_test_dia))
+conf_lda
+```
+
+From the confusion matrix, we can observe that the accuracy is 93.1% when LDA is applied on the Diabetes data set. All the "normal" and " overt diabetic" are classified correctly while 2 "chemical diabetic" adult is classified incorrectly as "Normal"
+
+## QDA
+
+Let us apply QDA on the train data and make predictions for the train and test data using predict() function.
+
+```{r}
+qda.fit <- qda(group~., data = Diabetes_train)
+qda.pred.train = predict(qda.fit, newdata = Diabetes_train)
+y_hat_train_qda <- as.numeric(qda.pred.train$class)-1
+qda.pred.test = predict(qda.fit, newdata = Diabetes_test)
+y_hat_test_qda <- as.numeric(qda.pred.test$class) - 1
+```
+
+Let us calculate the mis-classification error rate for train and test data.
+
+```{r}
+print(paste("Train Error for QDA on Diabetes data :",mean(y_hat_train_qda!=y_true_train_dia)))
+print(paste("Test Error for QDA on Diabetes data :",mean(y_hat_test_qda!=y_true_test_dia)))
+```
+
+The test error rate when QDA is applied on the Diabetes data is observed as 3.4%.
+
+```{r}
+conf_qda<-confusionMatrix(factor(y_hat_test_qda),factor(y_true_test_dia))
+conf_qda
+```
+
+From the confusion matrix, we can observe that the accuracy is 96.5% when QDA is applied on Diabetes data set. "Overt Diabetic" and "Chemical Diabetic" adults are correctly classified while one "Normal" adult is classified incorrectly as "Chemical Diabetic".
+
+## Comparison of LDA and QDA
+
+```{r}
+Model_names<-c("LDA","QDA")
+train_error<-c("10%","5.1%")
+test_error<-c("6%","3.4%")
+accuracy<-c("93.1%","96.5%")
+d = list(Model_names,train_error,test_error,accuracy)
+Comparison_table <- as.data.frame(d,col.names  = c("Model", "Train Error Rate","Test Error Rate","Accuracy"))
+Comparison_table
+```
+
+The train, test error rate are low and accuracy is high for QDA indicating that QDA performed well on classifying the groups of Adults in Diabetes data set.
+
+## 1c
+
+```{r}
+x <- data.frame("relwt" = 1.86, "glufast" = 184, "glutest" = 68,"instest"=122,"sspg"=544)
+lda1<-lda(group~.,data=Diabetes)
+lda1.predict<-predict(lda1,newdata=x)
+lda1.predict$class
+```
+
+For the given predictor values (features), LDA predicted the adult as "Normal".
+
+```{r}
+qda1<-qda(group~.,data=Diabetes)
+qda1.predict<-predict(qda1,newdata=x)
+qda1.predict$class
+```
+
+For the given predictor values (features), QDA predicted the adult as "Overt_Diabetic".
+
+## Problem 2
+
+The goal is to perform logistic regression, linear discriminant analysis(LDA) and KNN on the Weekly data set to predict the "Direction". 
+
+```{r}
+summary(Weekly)
+```
+
+Weekly data set contains information about the weekly percentage returns for the S & P stock index between 1990 and 2010. From the summary statistics, we can observe that the stock market is down (negative returns) for 484 weeks while the market is positive for 605 weeks in the given 21 years range.
+
+The percentage returns for the previous weeks (lag1, lag2, lag3, lag4, lag5) has a minimum of -18.1950 while the maximum is observed as 12.0260.
+
+```{r}
+dim(Weekly)
+```
+
+Weekly data consists of 1089 rows (weekly data for 21 years) and 9 columns representing various factors affecting the stock market direction for a given week.
+
+```{r}
+Missing_values = ifelse(any(is.na(Weekly)),"Weekly data contains missing values","There are no missing values in Weekly data set")
+Missing_values
+```
+
+## 2a
+
+```{r}
+cor(Weekly[,1:7])
+```
+
+High positive value indicate that the variables are highly correlated(positively) while the negative value indicates that the variables are negatively correlated with each other i.e., as the value of one variable increases, the value of other variable decreases.
+
+```{r}
+pairs(Weekly)
+```
+
+We can observe an increasing trend in Volume vs year while the remaining predictors are not correlated with each other.
+
+```{r}
+library(lattice)
+xyplot(Volume~Year,data=Weekly,groups=Direction,auto.key =list(space="right",title="Direction",columns=2))
+```
+
+We can observe that year and volume has positive correlation i.e., the volume of shares traded are increasing every year. We can clearly observe that for most of the weeks, the stock market direction is "Up".
+
+## 2b Logistic Regression
+
+Let us perform logistic regression with “Direction” as the response and the five lag variables, plus volume, as predictors.
+
+```{r}
+glm_fit<-glm(Direction~Lag1+Lag2+Lag3+Lag4+Volume,data=Weekly,family="binomial")
+summary(glm_fit)
+```
+
+From the summary statistics, we observe that none of the predictors are significant with the response "Direction" (since p value is high ) while the predictor "Lag2" has some significance.
+
+## 2c - Confusion Matrix
+
+Now let us compute the confusion matrix to find the overall fraction of correct predictions.
+
+Let us predict the directions using predict() function and compare the predictions with original "Directions". 
+
+```{r}
+glm.probs <- predict(glm_fit, type = "response")
+y_hat <- round(glm.probs)
+```
+
+Now let us convert the true "Directions" which are factors (Up/Down) to numeric and calculate the mis-classification rate.
+
+```{r}
+y_true<-as.numeric(Weekly$Direction)-1
+print(paste("Mis-calssification Error rate for Logistic Regression:", mean(y_hat!=y_true)))
+
+```
+
+The test error rate is 43.5% when logistic regression is applied on the Weekly data set with all the predictors.
+
+Now let us compute the confusion matrix to find the correct predictions.
+
+```{r}
+conf <- confusionMatrix(as.factor(y_hat), as.factor(y_true),positive = "1")
+conf
+
+```
+
+The percentage of correct predictions(accuracy) is observed as 56.4% when logistic regression is applied to Weekly data set. 
+
+From the confusion matrix, we can say that out of 605 weeks ("Up" trends) , the logistic regression correctly made the predictions for 560 weeks. Hence, the Sensitivity is observed as 560/(560+45) = 92.56%.
+
+Specificity (True Negative rate) is observed as 0.11 i.e.,55/(55+429) indicating that out of 484 weeks ( true "Down"), only 55 weeks are correctly predicted as "Down" by logistic regression. Hence, the specificity is low.
+
+The accuracy is low since 429 weeks are wrongly predicted as "Up" and 45 weeks are wrongly predicted as "Down" using Logistic Regression.
+
+## 2d - Logistic Regression with Lag2 as predictor
+
+Now let us divide the data into train (1990-2008) and test (2009 and 2010) and perform Logistic regression on the train data.
+
+```{r}
+attach(Weekly)
+sample= (Year<2009)
+train=Weekly[sample,]
+test=Weekly[!sample,]
+```
+
+Now let us perform Logistic regression with "Lag2" as the predictor on the train data, make predictions on the test data and calculate the mis-classification rate.
+
+```{r}
+glm_fit2<-glm(Direction~Lag2, data=Weekly, family="binomial",subset=sample)
+glm_probs2<-predict(glm_fit2,newdata=test,type="response")
+glm_pred<-round(glm_probs2)
+```
+
+
+```{r}
+y_true_train<-as.numeric(train$Direction)-1
+y_true_test<-as.numeric(test$Direction)-1
+print(paste("Mis-calssification Error rate for held-out data:", mean(glm_pred!=(y_true_test))))
+
+```
+
+The mis-classification error rate for the test data (2009-2010) is observed as 37.5%
+
+Now let us compute the confusion matrix for the predictions made on the test data.
+
+```{r}
+conf <- confusionMatrix(as.factor(glm_pred), as.factor(y_true_test),positive = "1")
+conf
+```
+
+The percentage of correct predictions (accuracy) is observed as 62.5%. i.e., (9+56)/(34+5+56+9) indicating that out of 104 total weeks, the predictions are true for 65 weeks when Logistic regression is applied on the Weekly data set with Lag2 as predictor.
+
+## 2e - Linear Discriminent Analysis
+
+Linear Discriminant Analysis assumes that every class has a common covariance matrix and works well for more than 3 classes.
+
+Now let us apply LDA on the Weekly train data and make predictions for train and test data.
+
+```{r}
+lda.fit <- lda(Direction~Lag2, data = train)
+lda.pred.train <- predict(lda.fit, newdata = train)
+y_hat_train <- as.numeric(lda.pred.train$class)-1
+lda.pred.test <- predict(lda.fit, newdata = test)
+y_hat_test <- as.numeric(lda.pred.test$class)-1
+```
+
+Now let us calculate the mis-classification rate for train and test Weekly data.
+
+```{r}
+lda_train_error <- sum(abs(y_true_train - y_hat_train))/length(y_true_train) 
+lda_test_error <- sum(abs(y_true_test - y_hat_test))/length(y_true_test)  
+print(paste("Train Error for LDA:",lda_train_error))
+print(paste("Test Error for LDA:",lda_test_error))
+```
+
+Test Error rate is observed as 37.5% when LDA is applied on the Weekly data set.
+
+Now let us compute the confusion matrix to find the number of correct predictions.
+
+```{r}
+conf <- confusionMatrix(as.factor(y_hat_test), as.factor(y_true_test),positive = "1")
+conf
+```
+
+The accuracy is 62.5% when LDA is applied on the test data (2009-2010) i.e., (9+56) weeks are predicted correctly out of total (9+56+34+5) weeks.
+
+
+## 2f -K-Nearest Neighbours
+
+Let us apply k-nearest neighbors on the weekly train data and test data with k value 1
+
+```{r}
+set.seed(1)
+fit_test_knn <- knn(as.matrix(train$Lag2), as.matrix(test$Lag2), (as.numeric(train$Direction)-1), k = 1)
+
+```
+
+Let us find the test error for kNN with k=1.
+
+```{r}
+print(paste("Test Error for knn with k=1 :",mean(fit_test_knn!=y_true_test)))
+
+```
+
+The test error is obtained as 50% when KNN is applied on the Weekly data set.
+
+```{r}
+conf <- confusionMatrix(as.factor(fit_test_knn), as.factor(y_true_test),positive = "1")
+conf
+```
+
+From the confusion matrix, we can observe the accuracy is 50 % when k-nearest neighbors is applied on the Weekly test data.
+
+## 2g- Comparison of all the models
+
+```{r}
+Model_names<-c("Logistic (Whole data)","Logistic(Lag2 as predictor)","LDA","KNN (k=1)")
+Test_Error_Rate<-c(0.43526,0.375,0.375,0.5)
+Model_Accuracy<-c("56.47%","62.50%","62.50%","50%")
+Sensitivity<-c(0.9256,0.9180,0.9180 ,0.5082)
+Specificity<-c(0.1136,0.2093,0.2093 ,0.4884)
+d = list(Model_names,Test_Error_Rate,Model_Accuracy,Sensitivity,Specificity)
+Comparison_table <- as.data.frame(d,col.names  = c("Algorithm", "Test_Error","Model_Accuracy","Sensitivity","Specificity")) 
+Comparison_table
+```
+
+By comparing the Test Error rate and Accuracy of all the models, we can observe that Logistic Regression (with Lag2 as predictor) and LDA performed similar on Weekly data with high Accuracy (62.5%) and minimum Test error rate (37.5%).
+
+The performance of LDA and Logistic Regression (with Lag2 as predictor) are better compared to applying other models on the Weekly data set since the predictions for "Direction" are correct most of the time.
+
+## 2h - Transformations on the data.
+
+## Logistic
+
+Let us perform Logistic regression with Interaction term year : Volume and calculate the mis-classification rate.
+
+```{r}
+glm.fit.trans<-glm(Direction~Year:Volume,data=Weekly,subset=sample,family="binomial")
+summary(glm.fit.trans)
+```
+
+The interaction between Year and Volume is not significant when Logistic Regression is applied on the Weekly data.
+
+```{r}
+glm.probs.trans = predict(glm.fit.trans, newdata = test, type = "response")
+glm.pred.trans=round(glm.probs.trans)
+print(paste("Test Error for Logistic Regression with Interaction term Year:Volume :",mean(glm.pred.trans!=y_true_test)))
+
+```
+
+## LDA with Interaction terms.
+
+Let us perform LDA with Interaction Term Lag1: Lag2
+
+```{r}
+lda.fit.trans = lda(Direction ~ Year:Volume, data = train)
+lda.pred.trans= predict(lda.fit.trans, newdata=test)
+print(paste("Test Error for LDA with Interaction term Year:Volume :",mean((as.numeric(lda.pred.trans$class)-1)!= y_true_test)))
+
+
+```
+
+## KNN with different k-values
+
+```{r}
+k_vals <- c(1,3,5,7,9,11,13,15)
+store_error_test <- c()
+for (i in seq(1,8)){
+  fit_test_knn <- knn(as.matrix(train$Lag2),as.matrix(test$Lag2),(as.numeric(train$Direction)-1), k = k_vals[i])
+  store_error_test[i]<-mean(fit_test_knn!=y_true_test)
+}
+store_error_test
+```
+
+The test error rate is decreasing as the value of k is increasing.

@@ -1,0 +1,448 @@
+---
+title: "Homework 1"
+output:
+  pdf_document: default
+  word_document: default
+  html_document:
+    df_print: paged
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+	echo = FALSE,
+	message = FALSE,
+	warning = FALSE
+)
+```
+
+### Problem 1
+
+The goal here is to do a Exploratory data analysis on the Auto dataset of ISLR Package. I have used Lattice, Geneplotter and ggplot for plotting the graphs. 
+
+```{r start}
+library(ISLR)
+library(lattice)
+library(DAAG)
+library(dplyr)
+library(geneplotter)
+library(MASS)
+library(corrplot)
+attach(Boston)
+attach(Auto)
+
+```
+
+Before plotting graphs and pre-processing the dataset, I did inspect the data using the functions dim(), names(), str(), head(), summary().
+
+```{r start1}
+dim(Auto)
+names(Auto)
+head(Auto)
+str(Auto)
+Auto_sample<-Auto
+```
+
+```{r summary}
+summary(Auto_sample)
+```
+
+The dataset contains 392 rows and 9 columns. Each of the 392 rows correspond to model of car and the columns represent various features. All columns are numeric except ‘name’ column which is a factor. Although features like ‘Cylinders’ and ‘Origin’ are read as numeric they are indeed factors as they take a few values. These have been converted to factor and given levels using the factor() function.
+
+The function summary() tells us how the data is distributed in each column(max value, min value, mean, median and interquartile range). Looking at the summary statistics we can say that, the average mpg is 23.45 with 9 being the minimum and 46 the maximum.
+
+```{r nullvalues}
+Auto_sample$cylinders=as.factor(Auto_sample$cylinders)
+Auto_sample$origin=factor(Auto_sample$origin,levels=c(1,2,3),labels = c("American","European","Japanese"))
+```
+
+Now let us plot a few graphs.
+
+The function cor() and plot() gives us the correlation among all columns numerically and graphically.
+
+For uni-variate analysis, I have used Histograms and Boxplots and for bi-variate I have used scatter plots.
+
+```{r plotting}
+plot(Auto_sample)
+cor(Auto[,-9]) #Excluding name feature, since it is not numeric
+```
+
+Looking at the above graphs, we can say that Cylinders, Displacement, Horsepower and Weight have a negative correlation with mpg where as acceleration is positively correlated
+
+```{r}
+histogram(Auto_sample$cylinders,xlab="Cylinders",main="Histogram of Cylinders",type="count")
+```
+
+The dataset has most cars with 4, 6 and 8 cylinders where as 3 and 5 cylinder cars are very few
+
+```{r univariate Histograms1}
+density_mpg<-density(Auto_sample$mpg)
+xlim<-range(density_mpg$x)
+ylim<-range(density_mpg$y)
+hist(Auto_sample$mpg,xlim=xlim,ylim=ylim,,breaks=20,probability=T,xlab="Miles per gallon(mpg)",main="Histogram of Miles per gallon(mpg)")
+lines(density_mpg)
+```
+
+Looking at the above graph, most of data has mpg between ~15 to ~30. We can also observe there are a very few vehicles that has mpg greater than 40. 
+
+```{r univariate Histograms2}
+hist(Auto_sample$weight,breaks=20,xlab="Weight (lbs.)",main="Histogram of weights")
+```
+
+Majority of cars have weights between 2000lbs and 4000lbs and a very few have 
+weights greater than 4500lbs
+
+```{r univariate Histogram3}
+hist(Auto_sample$horsepower,breaks=20,xlab="Horsepower",main="Frequency distribution of Horsepower")
+```
+
+From the above graph we can observe most cars have horsepower between 50 to 100 and graph looks a little right skewed.
+
+```{r univariate Histogram4 }
+hist(Auto_sample$acceleration,breaks=30,probability=T,xlab = "Acceleration",main="Histogram of Acceleration")
+```
+
+From the above graph we can say that Acceleration has a normal distribution (mean and median are also very close).
+
+```{r univariate Histogram5}
+histogram(Auto_sample$displacement,type="density",breaks=20,xlab="Displacement",main="Histogram of Displacement")
+histogram(Auto_sample$year,,breaks=20,xlab="year",type="count",main="Histogram of year")
+```
+
+```{r univariate boxplot1}
+par(mfrow=c(1,4))
+boxplot(Auto_sample$mpg,xlab="Miles per gallon")
+boxplot(Auto_sample$horsepower,xlab="Horsepower")
+boxplot(Auto_sample$acceleration,xlab="Acceleration")
+boxplot(Auto_sample$displacement,xlab="Displacement")
+```
+
+We observe that Horsepower and Acceleration have a few outliers. 
+
+Let's plot them with respect to Number of cylinders.
+
+```{r}
+bwplot(~acceleration|cylinders,data=Auto_sample,xlab="Acceleration",strip = strip.custom(factor.levels=c("3 cylinders","4 cylinders","5 cylinders","6 cylinders","8 cylinders")))
+
+bwplot(~horsepower|cylinders,data=Auto_sample,xlab="Horsepower",strip = strip.custom(factor.levels=c("3 cylinders","4 cylinders","5 cylinders","6 cylinders","8 cylinders")))
+
+bwplot(~weight|cylinders,data=Auto_sample,xlab="Weight",strip = strip.custom(factor.levels=c("3 cylinders","4 cylinders","5 cylinders","6 cylinders","8 cylinders")))
+```
+
+Cars with 8 cylinders have more weight and horsepower when compared to 3-5 cylinder cars
+
+```{r Density plots}
+densityplot(~mpg,groups=origin,data=Auto_sample,xlab="Miles per gallon",auto.key =list(space="right",title="Origin"),main="Density plot of Acceleration",plot.points=FALSE)
+```
+
+The global average mpg is 23.45. Here we can observe that most American cars have mpg below the global average where as most Japanese cars have mpg above the global average.
+
+```{r Bi-Variate Analysis}
+xyplot(mpg~weight,data=Auto_sample,xlab="Weight",ylab="Miles per Gallon",type=c("p","r"))
+```
+
+Here we can say that weight and mpg has a downward trend i.e as the weight of the car increases its mpg decreases. 
+
+```{r Bi-Variate Analysis1}
+xyplot(mpg~acceleration,data=Auto_sample,xlab="Acceleration",ylab="Miles per gallon",groups = cylinders,auto.key =list(space="right",title="# of cylinders",columns=2))
+```
+
+Here we can say that cylinder groups are well separated. 
+
+1. 8 cylinder cars have an acceleration below 15 and mpg below 20
+
+2. 6 cylinders cars have acceleration between 15-20 and mpg around 20
+
+3. most 4 cylinders cars have acceleration above 15 and mpg above 20
+
+3 and 5 cylinders cars have very few instances in our dataset and we cannot conclude their range.
+
+```{r scatterplot2}
+xyplot(horsepower~acceleration,xlab="Acceleration",ylab="Horsepower",type=c("p","r"),main="Scatter plot of Acceleration vs Horsepower")
+
+```
+
+Here we see a decreasing trend. Cars with high acceleration have less horsepower
+
+```{r scatterplot22}
+xyplot(Auto_sample$acceleration~Auto_sample$weight,groups = cylinders,xlab="Weight",ylab="Acceleration",main="Scatter plot of Horsepower vs weight",auto.key =list(space="right",title="Origin",columns=2))
+```
+
+Here we can say that cylinder groups are well separated. 
+
+1. 8 cylinder cars have an acceleration below 15 and weight above 3000
+
+2. 6 cylinders cars have acceleration between 15-20 and weight around 3000
+
+3. most 4 cylinders cars have acceleration above 15 and weight below 3000
+
+3 and 5 cylinders cars have very few instances in our dataset and we cannot conclude their range.
+
+```{r scatterplot3}
+xyplot(horsepower~displacement,xlab="Displacement",ylab="Horsepower",main="Scatter plot of Displacement vs Horsepower",auto.key = T)
+
+xyplot(weight~displacement,xlab="Displacement",ylab="Weight",main="Scatter plot of Weight vs Displacement")
+```
+
+Looking at the above graphs, we can observe that cars with higher displacement have more weight and acceleration.
+
+```{r scatterplot4}
+xyplot(mpg~horsepower,data=Auto_sample,xlab="Horsepower",ylab="Miles per gallon",main="Plot of Horsepower vs mpg",groups = cylinders,auto.key =list(space="right",title="# of cylinders",columns=2))
+```
+
+Horsepower and mpg are highly correlated with each other and have a negative trend. Also cylinder groups are well separated.
+
+```{r}
+xyplot(mpg~displacement,data=Auto_sample,xlab="Displacement",ylab="Miles per gallon",type=c("p","r"),columns=2,main="Plot of mpg vs displacement") 
+
+xyplot(mpg~displacement,data=Auto_sample,groups=cylinders,xlab="Displacement",ylab="Miles per gallon",type=c("p","r"),columns=2,main="Plot of mpg vs displacement",auto.key =list(title="Cylinders",columns=5)) 
+```
+
+Looking at the above graphs we can say that cars with higher displacement gives lower mpg. However when viewed with cylinders, 3 cylinders cars shows a increasing trend but this cannot be concluded as the dataset contains very few instances of 3 cylinder cars
+
+```{r stripplot}
+stripplot(origin ~ displacement, xlab = "Displacement(cu.inches)",ylab="Origin", data = Auto_sample)
+```
+
+American cars have wide range of displacement where as European and Japanese cars have displacement below 200.
+
+## Data Pre-processing steps
+  As part of data pre-processing steps, I looked for missing values and duplicate records and did not find any. Although there seems to be outliers I decided not to remove them before doing linear model analysis. We can handle the outliers based on the linear model analysis.
+
+```{r}
+
+if (nrow(distinct(Auto_sample)) == nrow(Auto_sample))
+{
+  TRUE
+} else
+{
+  FALSE
+}
+
+any(is.na(Auto_sample))
+
+save(Auto_sample,file="Processed_Auto.RData")
+```
+
+## Problem 2
+
+```{r}
+# Removing name column because it is not related to mpg
+lm.fit=lm(mpg~.-name,data=Auto)
+summary(lm.fit)
+```
+
+Processed Auto data set is trained with a linear model with ‘mpg’ as a response variable and all other variables as predictors. We did not include vehicle name as it doesn't have any effect on the mpg. The model with minimum Residual standard error and high R-squared value describes the best fit. Summary shows Residual standard error: 3.328 Adjusted R-squared:  0.8182.  The predictors displacement, weight, year and origin are significant with repsonse varibale ‘mpg’ as they have p-value <0.05
+
+```{r}
+## Found outliers in horsepower and acceleration columns, so trying to fit the model after removing the outliers
+Auto_trial<-Auto
+outliers_horsepower<-boxplot(horsepower,plot=FALSE)$out
+Auto_trial<-Auto_trial[-which(Auto_trial$horsepower %in% outliers_horsepower),]
+outliers_acceleration<-boxplot(acceleration,plot=FALSE)$out
+Auto_trial<-Auto_trial[-which(Auto_trial$acceleration %in% outliers_acceleration),]
+lm.fit=lm(mpg~.-name,data=Auto_trial)
+summary(lm.fit)
+```
+
+We now fit a Linear model after removing the outliers (boxplots of horsepower and acceleration shows outliers). Summary of linear fit shows that Residual standard error is 3.246 Adjusted R-squared is 0.8188. Predictors weight, origin, year are more significant where horsepower is less significant with response variable mpg.
+
+The model fit with and without outliers have similar Residual Standard Error and Multiple R –squared. But, I prefer model with outlier not removed as we may lose some valuable information given small dataset.
+
+a. Significance of the predictors can be explained by p-value. Small p-value indicates that we can reject null hypothesis and allows us to conclude that there is relationship between response and predictor.
+	
+From the above linear fit, it is clear that displacement, weight, year and origin have high significance with the response variable mpg since these predictors have p-values < 0.05
+
+b. Coefficient variable for “year” is positive, this tells that for one unit increase in year, response variable “mpg’ increases by 0.750773. It can be inferred that manufacturers make new advancements every year that improves the mpg of the vehicle.
+
+
+```{r}
+## * and : symbols to fit the model with interactions
+lm.fit=lm(mpg~.-name
+          +weight:acceleration
+          +acceleration:horsepower
+          +cylinders:horsepower
+          +cylinders:weight
+          ,data=Auto)
+
+
+summary(lm.fit)
+```
+
+c. Linear model is fit with all the predictors except ‘name’ and the interaction terms 	
+
+1. horsepower:acceleration
+
+2. cylinders:weight
+
+3. horsepower:cylinders
+
+4. weight:acceleration
+
+Although cylinders, horsepower and acceleration don’t contribute to mpg individually, they are significant when combined with each other. The p-values indicate that the interaction terms horsepower:acceleration, cylinders:weight, horsepower:cylinders are significant whereas the interaction term 
+weight:acceleration is less significant.
+
+
+## Problem 3
+
+```{r}
+
+dim(Boston)
+summary(Boston)
+str(Boston)
+
+if (nrow(distinct(Boston)) == nrow(Boston))
+{
+  TRUE
+} else
+{
+  FALSE
+}
+any(is.na(Boston))
+```
+
+MASS library is loaded into R and Boston data set is attached. By inspecting the structure using dim (Boston), it is observed that Boston data set contains 506 rows and 14 columns.  The data represents the housing values of suburbs in Boston. There are no missing values or duplicate rows in the data set. The data types of all columns are numeric except ‘rad’ and ‘chas’, which are integers.
+
+```{r}
+corrplot(cor(Boston),diag=FALSE,type="upper")
+plot(Boston)
+```
+
+
+```{r fig.fullwidth=TRUE}
+# positive correlation
+par(mfrow=c(2,2))
+plot(nox~indus,data=Boston)
+plot(nox~age,data=Boston)
+plot(medv~rm,data=Boston)
+plot(tax~rad,data=Boston)
+```
+
+Positive Correlations:
+
+•	Suburbs with less non–retail business acres per town (indus) have low nitrogen concentration (nox)
+
+•	Higher the age, the higher the nitrogen concentration (nox)
+
+•	With increase in rooms per dwelling (rm), median value (price) of owner-occupied homes increases (medv)
+
+•	With low index of accessibility to radial highways, low property tax (tax)
+
+
+```{r fig.fullwidth=TRUE}
+par(mfrow=c(2,2))
+plot(medv~indus,data=Boston) 
+plot(indus~chas,data=Boston) 
+plot(medv~lstat,data=Boston) 
+plot(medv~nox,data=Boston) 
+```
+
+Negative Correlations:
+
+•	Suburbs with low proportion of business acres per town (indus) have high median value of owner-occupied homes
+
+•	Suburbs with high proportion of business acres per town (indus) are not bound by river (chas)
+
+•	As the percent of lower status population (lstat) increases, median value of owner-occupied homes decreases
+
+•	Suburbs with high nitrogen oxides concentration (nox) have low median value of owner-occupied homes (medv)
+
+#3b
+
+```{r}
+lm.fit=lm(crim~.,data=Boston)
+summary(lm.fit)
+```
+
+b. To find the predictors associated with per capita crime rate, a linear model is fit with per capita crime rate (crim) as response variable. The summary of linear fit indicates that weighted mean of distances to five Boston employment centers (dis), index of accessibility to radial highways (rad), median value of owner-occupied homes in \$1000s(medv) are associated with response variable per capita crime rate (crim).
+
+Let us plot few graphs to visualize the association of crime rate with the predictors.
+
+```{r}
+par(mfrow=c(2,2))
+plot(crim~rad,data=Boston) 
+plot(crim~tax,data=Boston) 
+plot(crim~age,data=Boston)
+plot(crim~medv,data=Boston)
+```
+
+•	Suburbs with high accessibility to highways have high per capita crime rates 
+
+•	Suburbs with high property tax have higher crime rates
+
+•	Suburbs with older homes have higher crime rates
+
+•	Suburbs with low median value of owner-occupied homes(medv) have higher crime rate.
+
+
+#3c
+
+```{r}
+par(mfrow=c(1,2))
+summary(Boston$crim)
+boxplot(Boston$crim)
+hist(Boston$crim)
+q3 = quantile(Boston$crim, .75) 
+q1 = quantile(Boston$crim, .25)
+IQR = q3 - q1
+Outliers = q3 + 1.5*IQR
+bostoncrimeout <- Boston[Boston$crim>Outliers,]
+nrow(bostoncrimeout)
+
+```
+
+In Boston data set, the minimum crime rate is 0.00632 and the maximum is 88.97. This shows that the range is very high. The mean and median are 3.61 and 0.25 respectively. Here, the mean is greater than median indicating that the data is positively skewed.
+
+To find the suburbs with high crime rates, I have used boxplot and histogram to find the extreme values. Using the standard rule, any value greater than 
+'Q3 + 1.5 * (Q3 - Q1)' can be considered as extreme/outliers. So, in our data set crime rate > 9.069639 are considered high. There are 66 suburbs with high crime rate which is 13.04% of the total suburbs. 
+
+```{r}
+par(mfrow=c(1,2))
+summary(Boston$tax)
+boxplot(Boston$tax)
+hist(Boston$tax)
+tax_limit<-quantile(Boston$tax, 0.95) 
+Boston_hightax<-Boston[Boston$tax>=tax_limit,]
+nrow(Boston_hightax)
+
+```
+
+The minimum tax rate is 187 and the maximum is 711. The mean and median tax rates are 408.2 and 330 respectively.
+
+From the above boxplot, we didn't see any outliers but when we plot a histogram we can see that most suburbs have tax rate between 200 - 500 and there are suburbs where tax rate is high (>600). So tax rate greater than 95th percentile can be considered high. There are 137 suburbs with high tax rates which is 27% of the dataset.
+
+```{r}
+par(mfrow=c(1,2))
+summary(Boston$ptratio)
+boxplot(Boston$ptratio)
+hist(Boston$ptratio)
+```
+
+The minimum ptratio is 12.6 and the maximum is 22. The mean and median ptratio are 18.46 and 19.05 respectively. 
+
+From the boxplot and histogram we see that the values are equally distributed and has a wide range and there are no extreme values. However there are high number of suburbs with tax rates around 20.
+
+#3d
+
+```{r}
+par(mfrow=c(2,2))
+hist(Boston$rm)
+df_rm7<-(Boston[Boston$rm>7,])
+nrow(df_rm7)
+df_rm8<-(Boston[Boston$rm>8,])
+nrow(df_rm8)
+summary(df_rm8)
+plot(crim~rm,data=df_rm8)
+plot(medv~rm,data=df_rm8)
+plot(tax~rm,data=df_rm8)
+xyplot(chas~rm,data=df_rm8)
+```
+
+d. In Boston data set, 64 suburbs have more than seven rooms per dwelling and 13 suburbs have more than eight rooms per dwelling which is calculated by filtering the dataset and using nrow() function. 
+
+•	The median value of owner-occupied homes (medv) is more than $35000 for suburbs with more 8 rooms per dwelling
+
+•	Per capita crime rate per town (crim) is below 1 for suburbs with more than 8 rooms per dwelling
+
+•	Full property tax rate per $10,000(tax) is between $200-$400 for suburbs with more than 8 rooms per dwelling
+
+•	Most suburbs with more than 8 rooms per dwelling are not bounded by the river

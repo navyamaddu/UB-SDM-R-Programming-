@@ -1,0 +1,770 @@
+---
+title: "Homework_2"
+output:
+  html_document: default
+  word_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+	echo = TRUE,
+	message = FALSE,
+	warning = FALSE
+)
+```
+
+## Problem 1
+
+The goal here is to fit a linear model, forward subset selection  and also exhaustive subset on the Cereal data set. Let us explore the data and perform exploratory data analysis before training the models.
+
+```{r cars444}
+set.seed(10)
+library(class)
+library(leaps)
+library(lattice)
+setwd("/Volumes/Navya/UB/EAS-506/Week_3/Homework_2/50360271")
+cereal_data<-read.csv(file="cereal.csv")
+#View(cereal_data)
+dim(cereal_data)
+plot(cereal_data)
+```
+
+The dataset contains 77 rows and 15 columns. Each of the 77 rows correspond to a cereal and the columns represent various features. Here, we are building a predictive model for nutritional rating, hence it is considered as response variable.
+
+```{r cars22}
+any(is.na(cereal_data))
+```
+
+There are no missing values in the Cereal data set. 
+
+```{r}
+summary(cereal_data)
+```
+
+
+The minimum value of rating is 18.04 and maximum value is 93.70 with mean and median 42.67 and 40.40 respectively. Similarly minimum calories is 50 and maximum calorie is 160 with mean and median 106 and 110 respectively. 
+
+The range of fat content among all the cereals is 0gms - 5gms. Also mean and median of fat variable is almost same so we can say that they are normally distributed.
+
+We can also see some negative values in carbo, sugars and potass variables. I looked into those and found that there are 3 rows with either of those 3 variables with negative values. As it is not possible to have negative values for these variables, we can either remove them or impute with mean of that respective variable.
+
+```{r}
+cereal_data[cereal_data$sugars==-1,]
+cereal_data[cereal_data$carbo==-1,]
+cereal_data[cereal_data$potass==-1,]
+
+cereal_data$sugars = ifelse(cereal_data$sugars==-1,mean(cereal_data$sugars),cereal_data$sugars)
+cereal_data$carbo = ifelse(cereal_data$carbo==-1, mean(cereal_data$carbo),cereal_data$carbo)
+cereal_data$potass = ifelse(cereal_data$potass==-1,mean(cereal_data$potass),cereal_data$potass)
+
+summary(cereal_data)
+```
+
+Here I am replacing negative values in sugars, carbo and potass with mean of the respective variable.
+
+```{r cars1}
+par(mfrow=c(2,2))
+boxplot(cereal_data$rating,xlab="rating")
+boxplot(cereal_data$sugars,xlab="sugars")
+boxplot(cereal_data$carbo,xlab="carbo")
+boxplot(cereal_data$protein,data=cereal_data,xlab="protein")
+```
+
+We see protein and rating has some outliers. The protein content present in the cereals is in the range 1gm - 6gms and most cereals have protien between 1-4gms while a few has 5-6gms. Most cereal ratings are between 20-80 while only one cereal has rating of ~93.
+
+```{r cars121}
+par(mfrow=c(2,2))
+boxplot(cereal_data$fat,xlab="fat")
+boxplot(cereal_data$vitamins,xlab="vitamins")
+boxplot(cereal_data$potass,xlab="potass")
+boxplot(cereal_data$calories,xlab="calories")
+```
+
+```{r cars134}
+par(mfrow=c(1,2))
+boxplot(cereal_data$cups,xlab="cups")
+boxplot(cereal_data$weight,data=cereal_data,xlab="weight")
+```
+
+Box plots of rating, potass, protein, calories, weight,vitamins,cups contain some outliers.
+
+```{r cars2}
+#Pre-processing steps
+str(cereal_data)
+cereal_data$mfr<-as.factor(cereal_data$mfr)
+cereal_data$type<-as.factor(cereal_data$type)
+cereal_data<-cereal_data[,-1]
+#View(cereal_data)
+```
+
+After viewing the summary and data types of each column, it is observed that data types of mfr and type are characters and we can convert them to factors given there are few levels. The name column is removed since it is not related to rating.
+
+Before applying lm fit, let us divide the data into train and test in the ratio 80:20.
+
+```{r cars3}
+set.seed(11)
+indices<-sample(1:77,62,replace = FALSE)
+cereal_train=cereal_data[indices,]
+cereal_test=cereal_data[-indices,]
+```
+
+## 1a
+
+```{r cars35}
+lm.fit=lm(rating~.,data=cereal_train)
+summary(lm.fit)  
+```
+
+Processed Cereal data set is split into training and test datasets and the training data is used to build a linear model with ‘rating’ as a response variable and all other variables as predictors. The model with minimum Residual standard error and high R-squared value describes the best fit. Summary shows Residual standard error: 1.05 Adjusted R-squared: 0.9929 
+The predictors calories,protein,fat,sodium,fiber,carbo,sugars,vitamins are significant with the response variable ‘rating’ as they have p-value <0.05 while shelf, weight and cups are less significant. 
+
+```{r cars36}
+lm.fit2=lm(rating~.+cups:weight
+           +cups:sugars
+           +weight:calories
+           +vitamins:protein
+           ,data=cereal_data)
+summary(lm.fit2)
+
+```
+
+Now a Linear model is fit to observe the effect of interaction terms.The interactions terms cups:weight, cups:sugars, weight:calories, vitamins:protein are not significant as they have large p-values.
+
+We now predict the coefficients using predict function on the train and test data.
+
+```{r cars53}
+#training error
+lm.predict<-predict(lm.fit,newdata = cereal_train)
+print(paste("Train MSE for Linear Model:",mean((cereal_train$rating - lm.predict)^2)))
+#test error
+lm.predict<-predict(lm.fit,newdata = cereal_test)
+print(paste("Test MSE for linear model:", mean((cereal_test$rating - lm.predict)^2)))
+```
+
+The Mean Squared Error for training data is 0.7486688 and Mean Squared Error(MSE) for test data is 2.255024.  
+
+
+## 1b
+
+Forward subset selection begins with a model containing no predictors, and then adds predictors to the model, one-at-a-time, until all of the predictors are in the model.At each step the variable that gives the greatest additional improvement to the fit is added to the model.
+
+Now let us apply forward subset selection to training samples of cereal data set.
+
+```{r}
+forward_subset<-regsubsets(rating~.,data=cereal_train,nvmax=19,method = "forward")
+summary(forward_subset)$outmat
+summary_forward<-summary(forward_subset)
+```
+
+
+The summary statistics of forward subset selection shows all the best k-predictor models(here range of k is 1 to 19 ) having smallest RSS and highest R squared values.
+
+
+```{r}
+summary_forward$rss
+plot(summary_forward$rss,xlab="Subset size",ylab="RSS",type="b")
+```
+
+Residual Sum of Squares is high (~5000) for one variable model and sharply reduced to (~2000) for 2-variable model and the RSS flattened out after 10-variable model.
+
+```{r}
+summary_forward$rsq
+plot(summary_forward$rsq,xlab="Subset size",ylab="R-Squared",type="b")
+```
+
+We can observe that R-squared statistic increases from 60% when only one variable is included in the model to 99% when 10 variables are included in the model 
+
+```{r}
+#Validation set approach to find the best predictors
+
+test.mat=model.matrix(rating~.,data=cereal_test)
+train.mat=model.matrix(rating~.,data=cereal_train)
+test.errors=rep(NA,19)
+train.errors=rep(NA,19)
+for(i in 1:19){
+  coefi=coef(forward_subset,id=i)
+
+  test_pred=test.mat[,names(coefi)]%*%coefi
+ 
+  train_pred=train.mat[,names(coefi)]%*%coefi
+ 
+  test.errors[i]=mean((cereal_test$rating-test_pred)^2)
+  
+  train.errors[i]=mean((cereal_train$rating-train_pred)^2)
+  
+}
+```
+
+We use validation set approach to find the best model among all the k-predictor models.In validation set approach, the prediction is done on the test data by multiplying the coefficients obtained from fitting regsubsets on the train data. 
+
+```{r}
+plot(test.errors,ylim=c(0,150),xlim=c(0,15),col="red",type="b",xlab="subset size",ylab="MSE",main="Forward subset selection")
+lines(train.errors,col="blue",type="b")  
+legend("topright",c("Test","Training"),lty=c(1,1),lwd=c(2.5,2.5),col=c("red","blue"))  
+```
+
+Test and train errors are high for one predictor model and are decreasing as the number of predictors are increasing.
+
+We can observe a sharp decline in test MSE from one predictor model(~145) to 4 predictor model(~4) and is almost flattened out from 5 predictor model to 14 predictor model 
+
+Train MSE sharply reduced from ~67 (1 predictor model) to ~5 (4-predictor model) and gradually decreased to ~0 (10-predictor model).
+
+
+```{r}
+print(paste("Test MSE for forward subset selection:",min(test.errors)))
+print(paste("Train MSE for forward subset selection:",min(train.errors)))
+```
+
+The minimum test error (1.97) is obtained for the model with 6 predictors using forward subset selection.
+
+```{r}
+forward_best_predictors<-which.min(test.errors)  
+coef(forward_subset,forward_best_predictors)
+coef(forward_subset,6)
+```
+
+The minimum test error (1.97) is obtained for the model with 6 predictors using forward subset selection.
+
+From Validation set approach, we can say that 6 predictor model has minimum test MSE and the significant predictors are protein, fat, sodium, fiber, sugars and vitamins
+
+```{r}
+min_bic_forward<-which.min(summary_forward$bic) #13
+max_adjr2_forward<-which.max(summary_forward$adjr2) #16
+min_cp_forward<-which.min(summary_forward$cp) #14
+```
+
+The single best model among k predictor models can also be selected using Cp, BIC, or adjusted R2.
+
+The model with minimum bic or minimum Cp or maximum Adjusted R-squared can be considered as the best model.
+
+
+```{r}
+par(mfrow=c(1,3))
+plot(summary_forward$adjr2 ,xlab="Number of Variables ",ylab="Adjusted RSq",type="l")
+points(max_adjr2_forward,summary_forward$adjr2[max_adjr2_forward],col="red",pch=20)
+
+plot(summary_forward$bic ,xlab="Number of Variables ",ylab="BIC",type="l")
+points(min_bic_forward,summary_forward$bic[min_bic_forward],col="red",pch=20)
+
+plot(summary_forward$cp ,xlab="Number of Variables ",ylab="Cp",type="l")
+points(min_cp_forward,summary_forward$cp[min_cp_forward],col="red",pch=20)
+
+```
+
+
+From the above plots, we can say that 16 predictor model has maximum Adjusted r_squared and 13 predictor and 14 predictor models have best BIC and Cp respectively. 
+
+
+```{r}
+#par(mfrow=c(1,2))
+plot(forward_subset,scale="r2")
+plot(forward_subset,scale="adjr2") 
+plot(forward_subset,scale="Cp")
+plot(forward_subset,scale="bic")
+```
+
+The plots display the selected variables for the best model with a given number of predictors, ranked according to the R-squared, BIC, Cp, adjusted R2. For instance, 16 variables are included in the model at maximum value of Adjusted R-squared. 
+
+## 1c
+
+```{r}
+best_subset<-regsubsets(rating~.,data=cereal_train,nvmax=19,nbest=1,method="exhaustive")
+summary<-summary(best_subset)
+summary(best_subset)$outmat
+```
+
+Exhaustive subset selection is performed on Cereal training data with rating as response variable using regsubsets() with method=exhaustive. The summary() statistics provide the best set of variables for each model size having minimum Residual Standard Error and maximum R-squared.
+
+```{r}
+summary$rsq
+plot(summary$rsq,xlab="Subset size",ylab="R-Squared",type="b")
+```
+
+
+We can observe that R-squared statistic increases from 60% when only one variable is included in the model to 100% when 9 the variables are included in the model and is constant at 1 till all the variables are included in the model .
+
+```{r}
+summary$rss
+plot(summary_forward$rss,xlab="Subset size",ylab="RSS",type="b")
+```
+
+Residual Sum of squares is high(~5000) for one variable model and sharply reduced to (~2000) for 2-variable model. the curve almost flattened out after 5-variable model
+
+
+```{r}
+#Validation set Approach to find minimum test MSE
+train.errors_best=rep(NA,19)
+test.errors_best=rep(NA,19)
+
+test.mat=model.matrix(rating~.,data=cereal_test)
+train.mat=model.matrix(rating~.,data=cereal_train)
+for(i in 1:19){
+  coefi=coef(best_subset,id=i)
+  test_pred=test.mat[,names(coefi)]%*%coefi
+  train_pred=train.mat[,names(coefi)]%*%coefi
+  test.errors_best[i]=mean((cereal_test$rating-test_pred)^2)
+  train.errors_best[i]=mean((cereal_train$rating-train_pred)^2)
+}
+```
+
+We use validation set approach to find the best model among all the k-predictor models.In validation set approach, the prediction is done on the test data by multiplying the coefficients obtained from fitting regsubsets with method=exhaustive on the train data.
+
+```{r}
+par(mfrow=c(1,1))
+plot(test.errors_best,ylim=c(0,150),col="red",type="b",xlab="subset size",ylab="MSE")
+lines(train.errors_best,col="blue",type="b")
+legend("topright",c("Test","Training"),lty=c(1,1),lwd=c(2.5,2.5),col=c("red","blue"))
+train.errors
+```
+
+
+Test and train MSE is high for one predictor model and is decreasing as the number of predictors are increasing.
+
+We can observe a sharp decline in test MSE from one predictor model(~145) to 4 predictor model(~4) and flattened out furthur. 
+
+Train MSE sharply reduced from 67(1 predictor model) to 5(4-predictor model) and gradually decreased to ~1 (9-predictor model) and is almost flattened further.
+
+```{r}
+print(paste("Test MSE for exhaustive subset selection:",min(test.errors_best)))
+print(paste("Test MSE for exhaustive subset selection:",min(train.errors_best)))
+
+```
+
+The minimum test error (1.41) is obtained for the model with 8 predictors using exhaustive subset selection.
+
+```{r}
+exhaustive_best<-which.min(test.errors_best) 
+coef(best_subset,exhaustive_best)
+coef(best_subset,8)
+```
+
+The predictors are calories, protein, fat, sodium, fiber, carbo, sugars and vitamins.
+
+We can also find the best model among set of models of different sizes using Cp, BIC and Adjusted R-squared. 
+
+```{r}
+min_bic<-which.min(summary$bic) 
+max_adjr2<-which.max(summary$adjr2) 
+min_cp<-which.min(summary$cp)  
+```
+
+
+```{r}
+
+par(mfrow=c(1,3))
+plot(summary$adjr2 ,xlab="Number of Variables ",
+ylab="Adjusted RSq",type="l")
+points(max_adjr2,summary$adjr2[max_adjr2],col="red",pch=20)
+
+plot(summary$bic ,xlab="Number of Variables ",
+ylab="BIC",type="l")
+points(min_bic,summary$bic[min_bic],col="red",pch=20)
+
+plot(summary$cp ,xlab="Number of Variables ",
+ylab="Cp",type="l")
+points(min_cp,summary$cp[min_cp],col="red",pch=20)
+
+```
+
+From the above plots, we can say that maximum Adjusted R-squared is obtained for 15 predictor model and we can say that 12 predictor and 13 predictor models have best BIC and Cp respectively. 
+
+```{r}
+plot(best_subset,scale="r2")
+plot(best_subset,scale="adjr2") 
+plot(best_subset,scale="Cp")
+plot(best_subset,scale="bic")
+```
+
+The plots display the selected variables for the best model with a given number of predictors, ranked according to the R-squared, BIC, Cp, adjusted R2.For instance, all the variables are included in the model when the value of R-squared is 1 indicating the least squares solution.
+
+## 1d. Refer - WriteUp_1d_3e.pdf
+
+The write-up for 1d is given in a separate pdf. Please refer to 'WriteUp_1d_3e.pdf' in the submission folder
+
+### Problem 2
+
+The goal here is to fit a linear model and k-nearest neighbors on the zip code data.
+The zip code train data contains 7291 rows, and each line consists of the digit
+id (0-9) followed by the 256 gray scale values. Similarly, zip code test data contains 2007 observations.
+
+We have extracted the rows containing 2's and 3's from the zip train and zip test files.
+
+```{r}
+library(class)
+library(leaps)
+library(corrplot)
+set.seed(123456)
+#setwd("/Volumes/Navya/UB/EAS-506/Week_3/Homework_2")
+train <- read.table(gzfile("zip.train.gz"))
+test <- read.table(gzfile("zip.test.gz"))
+```
+
+To fit a linear regression for classification problem, I have performed round() on the predicted values and calculated the mis-classification error rate for both test and train data.
+
+The zip train data with only 2's and 3's contains 1389 rows and 257 columns while zip test data with 2's and 3's contain 364 rows and 257 columns and the linear regression is performed on training data.
+
+```{r}
+df_train_lm<-train[train$V1 %in% c(2,3),]
+df_test_lm<-test[test$V1 %in% c(2,3),]
+
+lm.fit2<-lm(V1~.,data=df_train_lm)
+lm.predict_train<-predict(lm.fit2,newdata = df_train_lm)
+print(paste("Train Error:",mean((round(lm.predict_train)!=df_train_lm$V1))))
+lm.predict_test<-predict(lm.fit2,newdata = df_test_lm)
+print(paste("Test Error:",mean(round(lm.predict_test)!=df_test_lm$V1)))
+```
+
+The mis-classification error rate for test data is observed as 0.04120879(~4%) while for train data, it is 0.005759539.(~0.5%).
+
+Classification performance of linear regression can be considered as a logistic regression. Let us calculate the mis-classification rate using glm().
+
+```{r}
+df_train<-train[train$V1 %in% c(2,3),]
+df_test<-test[test$V1 %in% c(2,3),]
+
+df_train$V1<-factor(df_train$V1)
+df_test$V1<-factor(df_test$V1)
+```
+
+Here we are trying to fit a classification model using glm so the response variable should be categorical.Hence V1 column is converted to factor. 
+
+
+```{r}
+contrasts(df_train$V1)
+glm.fit=glm(V1~.,data=df_train,family = binomial)
+```
+
+The glm() function is used with the argument family=binomial so the  2's and 3's are treated as binary variable. This can be viewed with contrasts() function on V1. 
+
+```{r}
+glm.probs_train<-predict(glm.fit,df_train,type="response")
+glm.pred<-rep("2",1389)
+glm.pred[glm.probs_train>0.5]="3"
+print(paste("Training Classification Accuracy (%):",100*mean(glm.pred==df_train$V1)))
+#mean(glm.pred!=df_train$V1)
+```
+
+We can observe that the training error is 0 and prediction accuracy on the train data is 1(100%). We can clearly say that all the training observations are classified correctly since the model is fit with the training data.
+
+Now let us do the predictions on the test data.
+
+```{r}
+#Test Predictions
+glm.probs<-predict(glm.fit,df_test,type="response")
+glm.pred<-rep("2",364)
+glm.pred[glm.probs>0.5]="3"
+```
+
+The predict function on the glm fit gives probabilities, when the probability is greater than 0.5 then the instance is classified as '3' (contrast for 3 is Binary 1) similarly when the probability is less than equal to 0.5 the instance is classified as 2 (contrast for 2 is binary 0).
+
+We use table() to produce a confusion matrix to determine how many observations are correctly classified and incorrectly classified.
+
+```{r}
+table(glm.pred,df_test$V1)
+```
+
+From the confusion matrix, we can see that out of 364 records, 189 are correctly classified as 2's and 155 are correctly classified as 3's and 20 records are classified incorrectly.
+
+```{r}
+print(paste("Classification Accuracy:",mean(glm.pred==df_test$V1)))
+print(paste("Classification Error:",mean(glm.pred!=df_test$V1)))
+```
+
+
+The prediction accuracy is 0.945(94.5%) and mis-classification error rate is observed as 0.054(~5%)
+
+```{r}
+##knn train  and test errors
+k_vals <- c(1,3,5,7,9,11,13,15)
+store_error_train <- c()
+store_error_test <- c()
+for (i in seq(1,8)){
+  fit <- knn(df_train[,-1], df_train[,-1], df_train$V1, k = i)
+  fit_predict <- knn(df_train[,-1], df_test[,-1], df_train$V1, k = i)
+  store_error_train[i]<-mean(fit!=df_train$V1)
+  store_error_test[i]<-mean(fit_predict!=df_test$V1)
+}
+d = list(k_vals,store_error_test,store_error_train)
+Error_table <- as.data.frame(d,col.names  = c("k value", "Test Error","Train Error")) 
+```
+
+
+Now, k-nearest neighbors is applied for different k-values on the zip code data containing 2's and 3's.
+
+Now let us plot the train and test MSE for given values of k.
+
+```{r}
+#store_error
+plot(store_error_test,ylim=c(0,0.08),col="red",type="b",xlab="K-value",ylab="Classification Error",main="Test/Train Error for each k",xaxt='n')
+axis(1,at = seq(1,8,1),labels = seq(1,15,2),las=1)
+lines(store_error_train,col="blue",type="b",xaxt='n') 
+legend("topright",c("Test","Training"),lty=c(1,1),lwd=c(2.5,2.5),col=c("red","blue")) 
+```
+
+The training and test Error are low for small k values (k=1) and high for large values of k.
+
+The test error is gradually increasing from 0.024 (k=1) to 0.038 (k=15) while the train error is zero (k=1) and slowly increased to 0.009 for k=15.
+
+After comparing the classification error of logistic/linear regression and k-nearest neighbors on the test data set, we can say that classification error of knn for any given value of k (2-3%) is better when compared to classification error of glm (~0.05) 
+
+```{r}
+Error_table
+```
+
+
+### Problem 3
+
+The goal is to apply linear model, lasso, ridge, pcr and pls to College data to find the number of applications received(Apps). Let us explore the data and perform exploratory data analysis before training the models.
+
+```{r cars333}
+set.seed(111)
+library(ISLR)
+library(glmnet)
+library(pls)
+data("College")
+dim(College)
+```
+
+College data set contains 777 rows and 18 variables. Each of the row represent a college and columns represent various statistics.
+
+```{r}
+any(is.na(College))
+```
+
+There are no missing values in College data set.
+
+```{r}
+summary(College)
+```
+
+From the summary statistics, we can see that the applications received are in the range 81 to 48094.
+The columns PhD and Grad.Rate are represented as percentages but have maximum values greater than 100. As it is not possible to have percentages greater than 100, let us remove them or make them 100 
+
+```{r}
+College[College$Grad.Rate>100,]
+College[College$PhD>100,]
+```
+
+
+```{r}
+College$Grad.Rate = ifelse(College$Grad.Rate>100, 100,College$Grad.Rate)
+College$PhD = ifelse(College$PhD>100, 100,College$PhD)
+```
+
+Here, I have replaced the percentage values of Grad.Rate and PhD greater than 100 with 100.
+
+I am applying log transformations on the columns considering the multi-scale nature of the problem.
+
+
+```{r}
+vars <- c("Apps","Accept","Enroll","Top10perc","Top25perc","F.Undergrad","P.Undergrad","Outstate","Room.Board","Books","Personal","PhD","Terminal","S.F.Ratio","perc.alumni","Expend","Grad.Rate")
+College[vars] <- lapply(College[vars], log)
+College$perc.alumni = ifelse(College$perc.alumni==-Inf, 0,College$perc.alumni)
+summary(College)
+```
+
+
+## 3a -Linear Model
+
+Before applying linear regression fit, let us divide the data into train and test in the ratio 80:20.
+
+```{r}
+n<-length(College[,1])
+train<-sample(1:n,0.8*n,replace = FALSE)
+College_train<-College[train,]
+#dim(College_train) 
+College_test<-College[-train,]
+#dim(College_test)
+```
+
+```{r}
+lm.fit<-lm(Apps~., data=College_train)
+summary(lm.fit)
+```
+
+Linear Model is fit with "Apps" as response variable and all other variables of train data as predictors. From the summary statistics, we can say that the Adjusted R-squared is 0.9643 and RSE is 0.2012 The predictors Accept,P.Undergrad, Out-state, Room.Board, Expend, Grad.Rate are highly significant with the response variable "Apps" since they have small p-value(<0.05).
+
+Now let us predict the number of Applications received by each college using the test data.
+
+```{r}
+
+lm.predict<-predict(lm.fit,newdata=College_train)
+
+print(paste("Train MSE:",mean((lm.predict-College_train$Apps)^2)))
+
+lm.predict<-predict(lm.fit,newdata=College_test)
+
+print(paste("Test MSE:",mean((lm.predict-College_test$Apps)^2)))
+
+```
+
+The Mean Squared Error for training data is 0.0392970881883826 and Mean Squared Error(MSE) for test data is 0.0535881039190369
+
+## 3b Ridge Regression
+
+```{r}
+College_train_x<-model.matrix(Apps~.,data=College_train)[,-1]
+College_train_y<-College_train[,2]
+#View(College_train_x)
+College_test_x<-model.matrix(Apps~.,data=College_test)[,-1]
+College_test_y<-College_test[,2]
+```
+
+To perform ridge regression and lasso, we first create x matrix with all the predictors for train and test and a y vector for train and test with the response variable "Apps".
+
+
+```{r}
+set.seed(13)
+ridge.fit<-cv.glmnet(College_train_x,College_train_y,alpha=0)
+```
+
+Now we perform ridge regression on the training matrix x and training vector y with aplha=0(for ridge). We choose the value of lambda using built in cross-validation function cv.glmnet().
+
+```{r}
+bestlam <- ridge.fit$lambda.min
+print(paste("Best lambda for ridge:",bestlam))
+```
+
+The best value of lambda that results in smallest cross validation error is 0.1038922 
+
+We now perform prediction on the test data using the lambda obtained from cross-validation.
+
+```{r}
+ridge.pred <- predict(ridge.fit, s = bestlam, newx = College_test_x, type = "response")
+
+print(paste("Test MSE for ridge regression:",mean((ridge.pred-College_test_y)^2)))
+```
+
+The Mean Squared Error for the test data is 0.07511656 which is slightly higher than the MSE obtained from Ordinary Least Squares regression.
+
+```{r}
+coef(ridge.fit,bestlam)
+```
+
+None of the coefficients obtained from ridge regression are zero indicating that the ridge regression does not perform variable selection.
+
+## 3d Lasso 
+
+```{r}
+lasso.fit=cv.glmnet(College_train_x,College_train_y,alpha=1)
+
+```
+
+Now we perform lasso regression on the training matrix x and training vector y with aplha=1(for lasso). We choose the value of lambda using built in cross-validation function cv.glmnet().
+
+```{r}
+bestlam<-lasso.fit$lambda.min
+print(paste("best value of lambda for lasso:",bestlam))
+```
+
+The best value of lambda that results in smallest cross validation error is 0.001858268 
+
+We now perform prediction on the test data using the lambda obtained from cross-validation.
+
+```{r}
+lasso.predict<-predict(lasso.fit,s=bestlam,newx=College_test_x,type="response")
+print(paste("Test MSE for lasso:",mean((lasso.predict-College_test_y)^2)))
+```
+
+The Mean Squared Error for the test data is 0.05428456 which is slightly higher than the MSE obtained from Ordinary Least Squares regression.
+
+```{r}
+coef(lasso.fit,bestlam)
+```
+
+The coefficients of Termianl, S.F.ratio are zero indicating that the lasso regression performed variable selection.
+
+## 3e PCR-Principal Components Regression
+
+```{r}
+set.seed(25)
+pcr.fit=pcr(Apps~., data=College_train ,scale=TRUE,validation ="CV")
+summary(pcr.fit)
+```
+
+Principal Component Regression (PCR) is fit on the College training data with parameter validation=CV so that it performs 10-fold cross validation for each value of k, the number of principal components used.
+
+The summary gives us the Cross-validation errors for the number of components and also percentage of the variance explained in predictors and response using different number of components.
+
+```{r}
+validationplot(pcr.fit,val.type="MSEP",main="Applications received")
+```
+
+The validation plot with val.type="MSEP" plots the cross validation MSE for each value of k.
+
+```{r}
+cv_errors <- RMSEP(pcr.fit)$val[1,,]
+(cv_errors)
+```
+
+From the cross -validation errors, we can see that the first minimum error is obtained for 17 components(0.2060465) .
+
+I consider k=17 components since it has the minimum CV error.
+
+Now the test MSE is calculated using predict() function with chosen k value.
+
+```{r}
+pcr.pred=predict(pcr.fit,College_test,ncomp=17)  
+print(paste("Test MSE for PCR:",mean((pcr.pred-College_test$Apps)^2)))
+```
+
+The test MSE for PCR regression is 0.0535881039190361 Since,PCR is not a feature selection method,the interpretation of final model is difficult. Instead, it performs  linear regression on k components(k<p) where each component is a linear combination of all p original predictors.
+
+```{r}
+pcr.fit2<-pcr(Apps~.,data=College,scale=TRUE,ncomp=17)
+summary(pcr.fit2)
+```
+
+
+We now perform PCR on the complete College data with selected k value (k=17). We can say that 96.36% of variance is explained by PCR with 17 components.
+
+## 3f PLS _ Partial Least Squares Regression
+
+```{r}
+set.seed(10)
+pls.fit<-plsr(Apps~., data=College_train, scale=TRUE,validation="CV")
+summary(pls.fit)
+```
+
+Partial Least Squares Regression (PLS) is fit on the College training data with parameter validation=CV so that it performs 10-fold cross validation for each value of k, the number of partial least squares directions used.
+
+The summary gives us the Cross-validation errors for the number of components and also percentage of the variance explained in predictors and response using different number of components.
+
+```{r}
+validationplot(pls.fit,val.type="MSEP",main="Applications received")
+```
+
+The validation plot with val.type="MSEP plots the cross validation MSE for each value of k.
+
+```{r}
+cv_errors <- RMSEP(pls.fit)$val[1,,]
+cv_errors
+```
+
+From the cross -validation errors, we can see that the first minimum error is obtained for 12 components(0.2057407) and started increasing again.
+
+I consider k=12 components since it has the minimum CV error.
+
+Now the test MSE is calculated using predict() function with chosen k value.
+
+```{r}
+pls.pred=predict(pls.fit,College_test,ncomp=12)  
+print(paste("Test MSE for PLS:",mean((pls.pred-College_test$Apps)^2)))
+```
+
+
+The test MSE for PLS regression is 0.05430994. PLS is not a feature selection method, so the interpretation of coefficients is quite difficult.
+
+```{r}
+pls.fit2<-plsr(Apps~., data=College,scale=TRUE,ncomp=12)
+summary(pls.fit2)
+```
+
+We now perform PLS on complete College data set to observe the variance explained with selected k- value. 
+It is observed that 96.36% of variance is explained by PLS with 12 components.
+
+PLS is similar to PCR but PLS identifies  the components in a supervised way—that is, it makes use of the response to identify new features that not only approximate the old features well, but also that are related to the response.
+
+## 3g. Refer - WriteUp_1d_3e.pdf
+
+The write-up for 3g is given in a separate pdf. Please refer to 'WriteUp_1d_3e.pdf' in the submission folder

@@ -1,0 +1,194 @@
+---
+title: "Homewrok_7"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+	echo = TRUE,
+	message = FALSE,
+	warning = FALSE
+)
+```
+
+## Problem 1
+
+The goal is to fit a neural network, CART model and a random forest to Cleveland heart-disease data. Let us explore the data before doing futher analysis.
+
+```{r}
+setwd("/Volumes/Navya/UB/EAS-506/Homework/Homework_7")
+load("Cleveland.RData")
+data("cleveland")
+dim(cleveland)
+clev_old<-cleveland[,-15]
+```
+
+In the cleveland data set, there are 296 patients in the study, and 13 predictive variables, including age, gender, and a range of biological measurements and 2 response variables diag1(diagnosis of heart disease: buff = healthy, sick = heart disease)) and diag2 that contains stage information about the sick . 
+
+Now let us assign dummy variables to the categorical variables present in cleveland data set.
+
+```{r}
+library(caret)
+dummy <- dummyVars(" ~.", fullRank = TRUE, data=clev_old) #effectively does what model matrix does
+clev <- data.frame(predict(dummy, newdata = clev_old))
+
+```
+
+
+
+```{r}
+summary(clev)
+head(clev)
+```
+
+From the summary, we can observe that the people with age groups 29-77 are considered for the study and there are 201 male and 95 female coonsidered for this study.
+
+
+```{r}
+Missing_values = ifelse(any(is.na(clev)),"cleveland data contains missing values","There are no missing values in cleveland data set")
+Missing_values
+```
+
+
+## Dividing into train and test
+
+Now let us divide the data into train and test in the ratio 80:20.
+
+```{r}
+set.seed(1)
+train = sample(1:nrow(clev), nrow(clev)*.80)
+clev_train = clev[train, ]
+clev_test = clev[-train, ]
+dim(clev_train)
+dim(clev_test)
+```
+
+## Neural Networks
+
+We now train a neural network on the cleveland train data and make predictions on the test data.
+
+```{r}
+library(neuralnet)
+library(nnet)
+```
+
+Let us fit a neural network with hidden layer =1 and plot the output.
+
+```{r}
+nn1 <- neuralnet(diag1.sick ~ ., data = clev_train, hidden = 1, err.fct = "ce", linear.output = FALSE)
+plot(nn1)
+```
+
+We now use neuralnet() with a range(1 to 4) of hidden neurons (tuning parameter) in each layer and the error factor is considered as "ce" i.e., error is calculated using cross-entropy and the value of stepmax is taken as 10^9.  
+
+```{r}
+y_true_train_clev<-clev_train$diag1.sick
+y_true_test_clev<-clev_test$diag1.sick
+
+train_err_store <- c()
+test_err_store <- c()
+for (i in 1:4){
+	
+	# fit neural network with "i" neurons
+	nn1 <- neuralnet(diag1.sick ~ ., data = clev_train, 
+	hidden = i, stepmax = 10^9, err.fct = "ce", linear.output = FALSE)
+	
+	# calculate the train error
+	pred <- predict(nn1, newdata = clev_train)
+	y_hat_train <- round(pred)
+	train_err <- length(which(y_true_train_clev != y_hat_train))/length(y_hat_train)
+	train_err_store <- c(train_err_store, train_err) #store the error at each iteration
+
+	pred <- predict(nn1, newdata = clev_test)
+	y_hat_test <- round(pred)
+	test_err <- length(which(y_true_test_clev != y_hat_test))/length(y_hat_test)
+	test_err_store <- c(test_err_store, test_err) #store the error at each iteration	
+}
+train_err_store
+test_err_store # 2
+```
+
+We can observe that 2 hidden layers have a minimum test error of 0.2000 (20%)
+
+## Cart Model
+
+We now fit a tree on the train data and find the correct predictions using the confusion matrix.
+
+```{r}
+set.seed(1)
+library(tree)
+tree.clev<-tree(diag1.sick~.,data=clev_train)
+summary(tree.clev)
+```
+
+From the summary, we can observe that the mean deviance for the train data is 0.08% and the number of terminal nodes are 16.
+
+```{r}
+tree.pred.train<-predict(tree.clev,clev_train)
+conf_tree_train<-confusionMatrix(as.factor(round(tree.pred.train)),as.factor(clev_train$diag1.sick))
+conf_tree_train
+```
+
+From the confusion matrix, we observe that the accuracy is 88.98% when predictions are made on the train data. 
+
+Now let us make predictions on the test set and calculate the mis-classification error rate.
+
+```{r}
+tree.pred<-predict(tree.clev,clev_test)
+#summary(tree.pred)
+conf_tree<-confusionMatrix(as.factor(round(tree.pred)),as.factor(clev_test$diag1))
+conf_tree
+
+```
+
+From the confusion matrix, we can observe that the accuracy obtained is 81.67% indicating that 81.67% are classified correctly i.e., ~20 % of patients are classified incorrectly into respective nodes. We can observe that 11 out of 60 patients are classified incorrectly giving an error rate of 11/60=~20%
+
+## Random Forests
+
+Now let us apply an ensemble technique Random Forest on the diabetes data set. We use random Forest() with n.tree = 10000 to produce 10000 trees.
+
+In randomForest, only a subset m of predictors are considered at each split thereby  decorrelating the trees and making the average of the resulting trees less variable and hence more reliable.
+
+We now fit randomforest() on the train data and make predictions on the test data. We consider m (mtry) = square root of p(predictors) for classification trees. Since, we have 13 predictors, we consider mtry=4. 
+
+```{r}
+set.seed(1)
+library(randomForest)
+#View(pima_train)
+rf.fit.clev <- randomForest(diag1.sick~., data = clev_train, n.tree = 10000,mtry=4)
+#summary(rf.fit.clev)
+y_hat_test <- predict(rf.fit.clev, newdata = clev_test, type = "response")
+y_hat_test_clev <- round(y_hat_test)
+y_hat_train <- predict(rf.fit.clev, newdata = clev_train, type = "response")
+y_hat_train_clev<-round(y_hat_train)
+
+```
+
+
+```{r}
+print(paste("Train Error on Cleveland data(Random forest) :",mean(y_hat_train_clev!=clev_train$diag1.sick)))
+print(paste("Test Error on Cleveland data (Random Forest):",mean(y_hat_test_clev!=clev_test$diag1.sick))) 
+```
+
+
+The test error is 0.15(15%) when random forests is applied on cleveland data set.
+
+```{r}
+library(caret)
+confusionMatrix(factor(clev_test$diag1.sick),as.factor(y_hat_test_clev))
+```
+
+From the confusion matrix, we can observe that the accuracy is 85% when predictions are done on the cleveland test data set ie., 32 are correctly classified as healthy and 19 are correctly classified as having heart disease.
+
+## Comparison of all models
+
+```{r}
+Model_names<-c("Neural Network","CART","Random Forest")
+accuracy<-c("80%","81%","85%")
+test_error<-c("20%","19%","15%")
+d = list(Model_names,test_error,accuracy)
+Comparison_table <- as.data.frame(d,col.names  = c("Model","Test Error Rate","Accuracy"))
+Comparison_table
+```
+
+From all the models, we can say that Random Forest performed well on the clevaland data set with an accuracy of 85%.
