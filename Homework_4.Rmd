@@ -1,0 +1,912 @@
+---
+title: "Homework_4"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+	echo = TRUE,
+	message = FALSE,
+	warning = FALSE
+)
+```
+
+### Problem 1
+
+The goal is to fit a Bayesian Network to the cad1(Coronary Artery disease) data in the gBase package. The data is from the individuals in the Danish heart clinic.
+
+```{r}
+library(gRbase)
+library(gRain)
+#library(RHugin)
+library(Rgraphviz)
+
+library(ggm)
+library(gRim)
+library(bnlearn)
+library(igraph)
+```
+
+
+```{r}
+data(cad1, package = "gRbase")
+head(cad1)
+dim(cad1)
+?cad1
+```
+
+The data set contains 236 rows with 14 columns with each column representing the characteristic of an individual.
+
+Let us infer a Bayesian network using hill-climbing algorithm and converting it into graphNEL object.
+
+```{r}
+
+cad.bn <- hc(cad1)
+net <- as(amat(cad.bn), "graphNEL")
+```
+
+
+Let us plot the network.
+
+```{r}
+
+plot(net)
+```
+
+
+The above plot is not optimal since attributes Sex, Inherit and Smoker should be the top nodes since they decide whether the person is having a heart disease or not.
+
+
+So, let us Use prior knowledge obtained from the variables in the help file and imposing it to order the variables.
+
+Let us divide the features into 4 blocks
+
+Block 1: Background information of the patient. 
+Block 2: Attributes related to Disease 
+Block 3: Disease manifestation
+Block 4: Clinical information of the patient.
+
+Let us assign the variables to each block.
+
+```{r}
+names(cad1)
+block <- c(1, 3, 3, 4, 4, 4, 4, 1, 2, 1, 1, 1, 3, 2) 
+blM <- matrix(0, nrow = 14, ncol = 14)
+rownames(blM) <- names(cad1)
+colnames(blM) <- names(cad1)
+blM
+```
+
+Let us fill the illegal edges and convert it into igraph for plotting.
+
+```{r}
+for (b in 2:4){
+	blM[block == b, block < b] <- 1
+}
+
+blackL <- data.frame(get.edgelist(as(blM, "igraph")))
+names(blackL) <- c("from", "to")
+
+```
+
+
+Let us refit the Bayesian network using the new constraints using the hill-climbing algorithm and convert it into graphNEL onject.
+
+```{r}
+?hc
+cad.bn2 <- hc(cad1, blacklist = blackL)
+net.constr <- as(amat(cad.bn2), "graphNEL")
+```
+
+The Bayesian network obtained using structural learning knowledge and prior knowledge through the definition of help files is as shown below.
+
+```{r}
+plot(net.constr)
+```
+
+
+### Problem 1b
+
+The above network is constructed as Directed acyclic graph(DAG) using the given conditional probabilities.
+
+```{r}
+g <- list(~Sex, ~Smoker|Sex, ~Inherit|Smoker, ~SuffHeartF, ~Hyperchol|Inherit:SuffHeartF, ~CAD|Hyperchol:Inherit, ~AngPec|CAD,~AMI|CAD,~QWave|CAD:AMI,~Hypertrophi|CAD:SuffHeartF,~Heartfail|Hypertrophi,~STchange|CAD:Hypertrophi,~STcode|STchange:SuffHeartF,~QWavecode|STcode:Hypertrophi)
+	
+cad_dag <- dagList(g)
+plot(cad_dag)
+```
+
+
+Conditional probability tables are inferred using the cad1 data.
+
+Here, we get 12 tables since we have 12 conditional probabilities.
+
+```{r}
+yn <- c("yes", "no")
+sex <- cptable(~Sex, values = c(1, 99), levels =yn)
+smoker<- cptable(~Smoker|Sex, values = c(5, 95, 1, 99), levels = yn )
+SuffHeartF<- cptable(~SuffHeartF|Smoker, values = c(5, 95, 1, 99), levels = yn )
+inherit <- cptable(~Inherit, values = c(5, 5), levels = yn )
+Hyper.Inherit <- cptable(~Hyperchol|Inherit, values = c(1,9,1,99), levels = yn )
+CAD.Hyperchol <- cptable(~CAD|Hyperchol:Inherit, values = c(6,4,3,7), levels = yn)
+Ang.cad <- cptable(~AngPec|CAD, values = c(5, 5),levels = yn)
+ami.cad <- cptable(~AMI |CAD, values = c(98, 2, 5, 95), levels = yn)
+qwave.cad <- cptable(~Qwave|CAD:AMI, values = c(9,1,7,3,8,2,1,9), levels = yn)
+hyper.cad <- cptable(~Hypertrophi|CAD:SuffHeartF, values = c(1,9,1,99,9,1), levels = yn )
+stchange.cad <- cptable(~STchange|CAD:Hypertrophi, values = c(98, 2, 5, 95,9,1), levels = yn)
+stcode.stchange <- cptable(~STcode|STchange:SuffHeartF, values = c(6,4,3,7,99,1,9,1), levels = yn)
+heartfail.hypertrophi <- cptable(~Heartfail|Hypertrophi, values = c(5, 5),levels = yn)
+qwave.hyper <- cptable(~QWavecode|Hypertrophi:STcode, values = c(9,1,7,3,8,2,1,9), levels = yn)
+
+```
+
+Let us build the network using the CPT tables.
+
+```{r}
+plist <- compileCPT(list(sex,smoker,SuffHeartF,inherit,Hyper.Inherit,CAD.Hyperchol,Ang.cad,ami.cad,qwave.cad,hyper.cad,stchange.cad,stcode.stchange,heartfail.hypertrophi,qwave.hyper))
+grn1 <- grain(plist)
+plot(grn1)
+summary(grn1)
+```
+
+Let us identify few d-separations from the graph.
+
+D-separation tells us whether the nodes x and y are dependent/independent on each other given some evidence/condition(observed node).
+
+```{r}
+??dsep
+dSep(as(net.constr, "matrix"), "Hypertrophi", "Sex", "CAD")
+dSep(as(net.constr, "matrix"), "Hypertrophi", "Smoker", "CAD")
+dSep(as(net.constr, "matrix"), "Inherit", "SuffHeartF", "CAD")
+dSep(as(net.constr, "matrix"), "CAD", "Smoker", "SuffHeartF")
+dSep(as(net.constr, "matrix"), "Sex", "Inherit", "CAD")
+dSep(as(net.constr, "matrix"), "Hypertrophi", "Sex", "Smoker")
+dSep(as(net.constr, "matrix"), "CAD", "Sex", "Smoker")
+dSep(as(net.constr, "matrix"), "Hyperchol", "SuffHeartF", "CAD")
+dSep(as(net.constr, "matrix"), "Hypertrophi", "Inherit", "CAD")
+dSep(as(net.constr, "matrix"), "STchange", "Hyperchol", "CAD")
+dSep(as(net.constr, "matrix"), "STchange", "AMI", "CAD")
+dSep(as(net.constr, "matrix"), "AMI", "AngPec", "Hypertrophi")
+dSep(as(net.constr, "matrix"), "Sex", "STchange", "CAD")
+dSep(as(net.constr, "matrix"), "Hypertrophi", "STchange", "CAD")
+```
+
+Some of the d-separations are TRUE indicating that the variables are d-seperated or conditionally independent.
+
+Few of them are :
+
+1. Hypertrophi and Sex are conditionally independent given the evidence that whether the person is Smoker or not.
+2. CAD and Sex are conditionally independent given the evidence of Smoker.
+3. STchange and AMI are independent given the evidence that the person is having coronary artery disease (CAD).
+
+### Problem 1c
+
+Now, let us compile the network and absorb the evidence of a female with high cholesterol into the graph.
+
+```{r}
+grn1c <- compile(grn1)
+summary(grn1c)
+```
+
+### Absorbing the evidence
+
+Consider a new observation is female with Hypercholesterolemia (high
+cholesterol). Let us Absorb this evidence into the graph, and revise the probabilities.
+
+```{r}
+
+grn1c.ev <- setFinding(grn1c, nodes = c("Sex", "Hyperchol"), states = c("Female", "yes"))
+abs <- querygrain(grn1c.ev, nodes = c("Heartfail", "CAD"), type = "marginal")
+abs
+```
+
+### Not absorbing the evidence.
+
+```{r}
+not_abs <- querygrain(grn1c, nodes = c("Heartfail", "CAD"), type = "marginal")
+not_abs
+```
+
+The probability of having CAD for a new female with high cholesterol is changed from 0.3165 to 0.6 when the information about the female is absorbed into the graph while the probability of Heartfail remained constant at 0.5 even when the information is absorbed/unabsorbed.
+
+### Joint probability of Heartfail and CAD.
+
+Now, let us observe the joint probability of CAD and Heartfail for a new female with high cholesterol.
+
+```{r}
+grn1c.ev <- setFinding(grn1c, nodes = c("Sex", "Hyperchol"), states = c("Female", "yes"))
+abs <- querygrain(grn1c.ev, nodes = c("Heartfail", "CAD"), type = "joint")
+abs
+```
+
+
+
+```{r}
+not_abs <- querygrain(grn1c, nodes = c("Heartfail", "CAD"), type = "joint")
+not_abs
+```
+
+The joint probability for the female to have CAD and Heartfail increased from 0.15825(15%) to 0.3(30%) when the information about the female(having high cholesterol) is absorbed into the graph.
+
+### Problem 1d
+
+Now, let us simulate the data with 100 observations and find the probability that a person is Smoker and having CAD given all other variables.
+
+```{r}
+new_data=simulate.grain(grn1c,nsim=100)
+dim(new_data)
+```
+
+The simulated data is stored in a table and its dimensions are 100x14.
+
+```{r}
+set.seed(10)
+pred<-predict(grn1c,newdata=new_data,predictors=c("Sex","SuffHeartF","Inherit","Hyperchol","AngPec","AMI","Qwave","Hypertrophi","STchange","STcode","Heartfail","QWavecode"),response = c("Smoker","CAD"))
+```
+
+The probabilities of the 100 users to be a Smoker and having CAD are given below.
+
+```{r}
+pred$pEvidence
+```
+
+
+Now, let us compare the predictions with the true data.
+
+```{r}
+table(predicted=pred$pred$CAD,actual=new_data$CAD)
+```
+
+From the confusion matrix, we can observe that the 24 observations are correctly predicted as having CAD Disease and 71 are correctly predicted as not having the disease CAD.
+
+```{r}
+table(predicted=pred$pred$Smoker,actual=new_data$Smoker)
+```
+
+From the confusion matrix, we can observe that 99 observations are correctly classified as non-smokers while 1 observation is incorrectly predicted.
+
+### Problem 2
+
+The goal is to analyze the Titanic data set which was collected by the British Board of Trade to investigate the sinking.
+
+Here, I am investigating the survival rates of women and children from first class and third class and investigate whether the first class people are given more preference than the third class passengers.
+
+Let us explore the data set before performing futhur analysis.
+
+
+```{r}
+titanic <- read.csv(file = "titanic.csv", header = TRUE, sep = ",")
+dim(titanic)
+```
+
+Titanic data set contains 887 rows with 8 columns each representing the details of the passengers like Sex, age, name ,Passenger class and various details.
+
+```{r}
+str(titanic)
+```
+
+All the features in this data set are integers, numeric and characters.
+
+Here, I am converting the features Sex, Pclass and survived to factors given few levels.
+
+```{r}
+titanic$Survived = factor(titanic$Survived,levels=c(0,1),labels=c("Died","Survived"))
+titanic$Sex = as.factor(titanic$Sex)
+titanic$Pclass = as.factor(titanic$Pclass)
+```
+
+Now, let us find the total number of survivors in the Titanic.
+
+```{r}
+survivors<-titanic[titanic$Survived=="Survived",]
+dim(survivors)
+
+```
+
+We can observe that out of 887 passengers, only 342 of them survived.
+
+
+```{r}
+perished<-titanic[titanic$Survived=="Died",]
+dim(perished)
+
+```
+
+Out of 887 passengers, 545 of them were dead.
+
+
+```{r}
+
+summary(titanic)
+```
+
+From the summary, we can observe that there are 314 female passengers and 573 male passengers in Titanic out of which 216 belong to first class, 184 belong to class 2 and 487 belong to third class. All the passengers are of age group 0-80.
+
+Let us plot the death and survival count of the passengers.
+
+```{r}
+library(ggplot2)
+ggplot(titanic,aes(x = Survived)) +geom_bar(width = 0.4) +theme_classic() +
+  labs(title = "Overall Death and Survival Rates", x = NULL, y = "No. of passengers",legend="True")
+```
+
+We can clearly say that most of the passengers died and only few of them survived.
+
+### Survival Rate by Sex
+
+```{r}
+ggplot(titanic,aes(x = Sex, fill = Survived)) + geom_bar(width = 0.4) +
+   
+  labs(title = "Survival rates by Sex", x = NULL, y = "No. of passengers")
+```
+
+From the above plot, we can observe that female passengers had high survival rate(~220 females survived out of 314) compared to males(~110 survived out of 573).
+
+### Survival rate by Passenger Class
+
+```{r}
+ ggplot(titanic,aes(x = Pclass, fill = Survived)) +geom_bar(width = 0.4) +labs(title = "Survival rates by Passenger Class", x = NULL, y = "No. of passengers")
+```
+
+We can clearly observe that highest number of deaths reported are from third class passengers while highest number of survivors are from first class.
+
+
+### Survival rates by age
+
+```{r}
+
+ggplot(titanic,aes(x = Age, fill = Survived)) +geom_histogram() +labs(title = "Survival rates by Age")
+```
+
+From the histogram, we can clearly observe that children less than 5 years had higher survival chances and Passengers aged 20-40 have less survival rate. 
+
+It is also clear that passengers aged about 65 - 75 had an almost 0 survival chance. 
+
+
+### Box plot of survival rates by age
+
+```{r}
+ggplot(titanic,aes(x = Survived, y = Age)) +geom_boxplot() +labs(title = "Survival rates by Age", x = NULL)
+```
+
+
+The median ages of passengers who survived and dead are almost similar.
+
+
+### Bar plot of Survival rates by Sex and passenger class
+
+```{r}
+ggplot(titanic,aes(x = Sex, fill = Survived)) +geom_bar(width = 0.4) +facet_wrap(~ Pclass) +
+ labs(title = "Survival rates Sex and Passenger class", x = NULL, y = "No. of passengers")
+```
+
+
+From the above plot, it is clear that the survival rate of female is higher compared to males irrespective of the class.
+
+It is also clear that male/female from the third class have high death rate compared to first and second class male/female passengers.
+
+### Survival rates by Sex, age and Passenger class.
+
+```{r}
+ggplot(titanic,aes(x = Age, fill = Survived)) +geom_histogram() +facet_wrap(~Sex + Pclass) +
+  labs(title = "Survival rates Age, Sex and Passenger class")
+```
+
+It is clear that first class female deaths are very low compared to male passengers indicating that female passengers of all age groups are given high preference.
+
+From the Exploratory data analysis, we can clearly conclude that first class women and children are given more preference and hence their survival rates are high compared to male passengers.
+
+While, the third class passengers are given less preference, hence the death rates of third class passengers particularly male are high compared to other classes.
+
+Hence, we can conclude that
+1.Women and childer were more likely to survive than men
+2.Survival rates were highest amongst first class passengers, then second. Third class had the highest death rates.
+
+### Fit a Bayesian Network
+
+```{r}
+?empty.graph
+library(bnlearn)
+res = empty.graph(names(titanic[,c('Survived','Pclass','Sex')]))
+modelstring(res) = "[Pclass][Sex][Survived|Pclass:Sex]"
+titanic.bn <- bn.fit(res, data=titanic[,c('Survived','Pclass','Sex')])
+titanic.bn
+```
+
+```{r}
+graphviz.plot(titanic.bn)
+```
+
+Convert the binary network into DAG by evaluating the conditional probabailty tables.
+
+
+
+```{r}
+??cptable
+library(gRain)
+yn <- c("yes", "no")
+sex<- cptable(~Sex, values = c(95, 5), levels = yn )
+pclass<- cptable(~Pclass, values = c(5, 95), levels = yn )
+survived<- cptable(~Survived|Pclass:Sex, values = c(5, 95, 1, 99), levels = yn )
+```
+
+
+```{r}
+plist <- compileCPT(list(pclass,sex,survived))
+grn1_new <- grain(plist)
+plot(grn1_new)
+```
+
+### Survival rates of Rose and Jack.
+
+Now, let us find the probability that Rose (1st class adult and female) would survive.
+
+```{r}
+cpquery(titanic.bn, (Survived=="Survived"), (Sex=='female' & Pclass==1))
+```
+
+The probability that 1st class female would survive is 0.956 (~95%) which clearly supports the movie Titanic since at the end of the movie, Rose is still alive.
+
+Now, let us find the probability of survival of Jack(3rd class adult and male)
+
+```{r}
+cpquery(titanic.bn, (Survived=="Survived"), (Sex=='male' & Pclass==3))
+```
+
+From the above result, we can clearly say that the probability of survival of Jack is very less ie., just 0.1391 (~14%) which clearly supports the movie Titanic since hero jack was not alive at the end of the movie.
+
+### Problem 4
+
+The goal is to design and evaluate a recommendation system such that for each user i and each movie j they did not see,  the k most similar users to i who have
+seen j are found and then use them to infer the user i’s rating on the movie.
+
+```{r}
+library(recommenderlab)
+data("MovieLense")
+?MovieLense
+class(MovieLense)
+```
+
+Let us explore the data before performing further analysis.
+
+Let us look at the first few ratings of the first user.
+
+```{r}
+
+head(as(MovieLense[1,], "list")[[1]])
+
+```
+
+
+### EDA on the raw data.
+
+Now, let us plot the histogram of number of ratings per each user using rowcounts() for the raw data.
+
+```{r}
+hist(rowCounts(MovieLense))
+
+```
+
+Now, let us plot the histogram of number of ratings per each movie using colcounts().
+
+```{r}
+hist(colCounts(MovieLense))
+```
+
+
+
+```{r}
+dim(getRatingMatrix(MovieLense))
+```
+
+The movielense data consists of 943 rows and 1664 columns where each column represents a movie and each row represents a user.
+
+Since, it is already a real rating matrix, no furthur conversion is needed.
+
+```{r}
+getRatingMatrix(MovieLense)[1:10, 1:10]
+```
+
+```{r}
+
+class(MovieLense)
+```
+
+
+
+```{r}
+image(MovieLense[1:100, 1:100], main = "Raw Movie Ratings")
+```
+
+### Normalize the raw data and EDA on the normalized data.
+
+Let us normalize the ratings before performing furthur analysis.
+
+```{r}
+
+ratingmat <- normalize(MovieLense)
+```
+
+
+```{r}
+image(ratingmat[1:100,1:100], main = "Normalized Movielense Data")
+```
+
+
+```{r}
+hist(getRatings(ratingmat), breaks = 100, main = "Histogram of normalized ratings")
+
+
+hist(rowCounts(ratingmat), breaks = 100, main = "ratings given by users")
+
+
+hist(colCounts(ratingmat), breaks = 100, main = "count of ratings per movie")
+```
+
+
+### Denormalize and binarize the ratings by creating a binary matrix.
+
+```{r}
+
+Movielense_denormalize <- denormalize(ratingmat)
+Movielense_binarize <- binarize(Movielense_denormalize, minRating = 4)
+getRatingMatrix(Movielense_binarize)
+image(Movielense_binarize[1:100,1:100], main = "Binarized ratings")
+```
+
+Let us perform User based collaborative filtering with Cosine distance with 10 nearest neighbours to find the most similar users.
+
+Movies not seen by each user are given as output by the recommender.
+
+### Creating a Recommendation system
+
+```{r}
+rec_mod = Recommender(MovieLense, method = "UBCF", param=list(method="Cosine",nn=10))
+rec_mod
+
+```
+
+Recommendations are generated by predict() . 
+
+The result are recommendations in the form of an object of class TopNList. Here we create top-20 recommendation lists for three users who have not watched the movies.
+
+
+```{r}
+Top_20_pred = predict(rec_mod, MovieLense[1:2], n=20)
+Top_20_List = as(Top_20_pred, "list")
+Top_20_List
+```
+
+Now let us predict ratings of users to those unwatched movies.
+The predicted ratings of the first 10 users who have not watched the recommended movies but are watched by the similar users are shown below.
+
+```{r}
+user_ratings <- predict(rec_mod, MovieLense, type = "ratingMatrix")
+as(user_ratings, "matrix")[1:10,1:10]
+
+```
+
+
+
+### Problem 5
+
+Now, let us divide the MovieLense data into training and test data in the ratio 80:20.
+
+```{r}
+e <- evaluationScheme(MovieLense, method="split", train=0.8,given=15, goodRating=5)
+
+```
+
+Let us apply User based collaborative on train data using various normalization techniques and distance = Euclidean and make recommendations on the test data.
+ 
+```{r}
+set.seed(12)
+user_based_non_normalized <- Recommender(getData(e, "train"), "UBCF", 
+      param=list(normalize = NULL, method="Euclidean"))
+
+
+user_bases_centered <- Recommender(getData(e, "train"), "UBCF", 
+      param=list(normalize = "center",method="Euclidean"))
+
+
+user_based_zscore <- Recommender(getData(e, "train"), "UBCF", 
+      param=list(normalize = "Z-score",method="Euclidean"))
+```
+
+
+
+Now, let us make predictions on the known part of the test data
+
+```{r}
+set.seed(10)
+
+p1 <- predict(user_based_non_normalized, getData(e, "known"), type="ratings")
+as(p1, "matrix")[1:10,1:10]
+
+p2 <- predict(user_bases_centered, getData(e, "known"), type="ratings")
+
+p3 <- predict(user_based_zscore, getData(e, "known"), type="ratings")
+
+```
+
+Now, let us calculate error between prediction and unknown test data for different normalized data.
+
+```{r}
+non_normalized_error<- rbind(UBCF_NN_error = calcPredictionAccuracy(p1, getData(e,"unknown")))
+centered_error<-rbind(UBCF_cen_error = calcPredictionAccuracy(p2, getData(e,"unknown")))
+zscore_error<-rbind(UBCF_z_error = calcPredictionAccuracy(p3, getData(e,"unknown")))
+non_normalized_error
+centered_error
+zscore_error
+```
+
+From the above error metrics, we can see that almost all the normalization techniques have almost similar RMSE while centering-based normalization technique has low error compared to other techniques. Hence, we can say that centering based normalization technique with Euclidean distance outperformed other techniques.
+
+### Evaluation using different methods
+
+```{r}
+algorithms<- list("random items" = list(name= "RANDOM", param=NULL),
+"popular items"= list(name = "POPULAR", param =NULL),
+"user-based CF"= list(name = "UBCF", param = list(nn=50)),
+"item-based CF"= list(name = "IBCF", param = list(k=50)),
+"SVD approximation" = list(name = "SVD", param= list(k=50)) )
+results_binarydata<- evaluate(e, algorithms, type="topNList", n=c(1,3,5,10,15,20))
+plot(results_binarydata, annotate =c(1,3),legend="topleft")
+
+```
+
+From the above ROC Curve, we can say that SVD and POPULAR ITEMS models outperformed all the other techniques indicating that these models are able to correctly predict the ratings compared to all other models like Userbased and Item based Collaborative filtering techniques.
+
+
+### Problem 6
+
+The goal is to perform Hierarchical clustering, SOM and Graphical Lasso to the State data released from the US department of Commerce.
+
+Let us explore the data before performing further analysis.
+
+```{r}
+data(state)
+head(state.x77)
+dim(state.x77)
+```
+
+
+The state.x77 contains information like Population, Income, Illiteracy, Life Exp, Murder,HS Grad, Frost, Area of all the 50 states present In U.S.
+
+```{r}
+?state
+str(state.x77)
+
+```
+
+```{r}
+summary(state.x77)
+```
+
+From the summary, we can observe that the minimum life expectancy is 67.96 while the maximum is at 73.60.
+
+The minimum Population as of July1, 1975 is 365 while the maximum population is 21198.
+
+Now, let us scale the data and perform further analysis.
+
+```{r}
+state_stats<-scale(state.x77)
+head(state_stats)
+```
+
+### Problem 6a - Hierarchial clustering
+
+Now let us cluster the data using Hierarchial clustering.
+
+First, the euclidean distance is calculated for the scaled data.
+
+```{r}
+dist_data<-dist(state_stats, method = 'euclidean')
+#dist_data
+```
+
+Using "hclust", Hierarchical clustering is performed on the scaled data and plotted.
+
+
+```{r}
+hdata<-hclust(dist_data)
+plot(hdata)
+abline(h=3.75, lty=2) 
+```
+
+
+By cutting the dendogram at height 4.5, we can observe that there are a total of 7 clusters with Alaska in the single cluster, we can say that the state Alaska can be treated as an outlier since it is clustered separately.
+
+From the dendogram we can observe that Nevada is clustered separately while California and Texas form a separate cluster.
+
+
+
+### Problem 6b - Self Organizing maps
+
+Self organizing maps uses a competitive learning and uses a neighborhood function to preserve the topological properties of the input space.
+
+somgrid() sets up a grid of units of a specified size and topology by calculating the distance between grid units.
+
+```{r}
+library(kohonen)
+set.seed(123)
+som_grid <- somgrid(xdim = 5, ydim = 5, topo = "hexagonal")
+state.som <- som(state_stats, grid = som_grid, rlen = 3000)
+?somgrid
+```
+
+Now let us plot the self organized map.
+
+```{r}
+plot(state.som)
+```
+
+Now, let us plot the somgrids of different types.
+
+
+```{r}
+
+plot(state.som, type = "changes", main = "State Data")
+
+
+plot(state.som, type = "count")
+
+
+plot(state.som, type = "mapping")
+```
+
+
+Neighbour distance plot is plotted for the state data and we observe that if the average distance is high, then the surrounding weights are very different and a light color is assigned to the location of the weight. If the average distance is low, a darker color is assigned. 
+
+```{r}
+coolBlueHotRed <- function(n, alpha = 1){rainbow(n, end=4/6, alpha = alpha)[n:1]}
+plot(state.som, type = "dist.neighbours", palette.name = coolBlueHotRed)
+```
+
+Now, let us cut the tree based on the obtained  height from hierarchial clustering which is 7.
+
+
+```{r}
+som_cluster <- cutree(hdata, h = 7)
+som_cluster
+```
+
+Now, let us plot the SOM with the obtained clusters.
+
+```{r}
+
+
+my_pal <- c("red", "blue", "yellow")
+my_bhcol <- my_pal[som_cluster]
+
+plot(state.som, type = "mapping", col = "black", bgcol = my_bhcol)
+add.cluster.boundaries(state.som, som_cluster)
+```
+
+From the mapping plot, we can observe that the data is clustered into different groups based on the similarity in the data. For instance, Alaska is not similar with any other states(as per the dendogram) in the US. Hence, it is clustered separetely (blue color)
+
+### Problem 6c-- graphical lasso
+
+Now let us apply graphical lasso to the state data set.
+
+```{r}
+data(state.x77)
+head(state.x77)
+```
+
+Let us apply corrplot to find correlation between different variables
+
+```{r}
+library(corrplot)
+M <- cor(state.x77)
+corrplot(M)
+
+```
+
+Let us scale the data and plot the first two principal components to find the variation in the features for all the states.
+
+```{r}
+new_data<-scale(state.x77)
+fit.pca <- prcomp(new_data)
+xlim_1 <- min(fit.pca$x[,1])-1
+xlim_2 <- max(fit.pca$x[,1])+1
+ylim_1 <- min(fit.pca$x[,2])-1
+ylim_2 <- max(fit.pca$x[,2])+1
+biplot(fit.pca, choices = c(1,2), scale = 0, xlim = c(xlim_1, xlim_2), ylim = c(ylim_1, ylim_2))
+
+```
+
+We can clearly observe that Alaska is quite different from all other states indicating that it can be treated as outlier. But , here I am not removing the outlier since important information will be lost.
+
+
+Let us look at the partial correlation.
+
+```{r}
+
+library(stats)
+library(gRbase)
+
+S.body <- cov.wt(state.x77, method = "ML")
+PC.body <- cov2pcor(S.body$cov)
+diag(PC.body) <- 0
+heatmap(PC.body)
+```
+
+Fitting a graphical lasso using glasso() with initial single regularization parameter rho=5.
+
+```{r}
+library(glasso)
+S <- S.body$cov
+m0.lasso <- glasso(S, rho = 5) 
+names(m0.lasso)
+```
+
+Now, let us grab the non-zero edges and set the elements of the diagonal to zero and convert the edges to a graphNEL object for plotting
+
+```{r}
+#m0.lasso$wi
+
+my.edges <- m0.lasso$wi != 0 
+diag(my.edges) <- 0 
+g.lasso <- as(my.edges, "graphNEL") 
+nodes(g.lasso)
+```
+
+Now, replaces the names of the nodes with the columns of the state data and plot the graphical lasso.
+
+```{r}
+nodes(g.lasso) <- c("Population","Income","Illiteracy","Life Exp","Murder","HS Grad","Frost","Area")
+plot(g.lasso)
+```
+
+Now, let us take this "single graph" and put it into a loop, to iterate over different rhos and save all the plots.
+
+```{r}
+library(geneplotter)
+
+my_rhos <- c(2,5,10,15,25,50)
+m0.lasso <- glassopath(S, rho = my_rhos)
+for (i in 1:length(my_rhos)){
+    my.edges <- m0.lasso$wi[ , , i] != 0 
+    diag(my.edges) <- 0 
+    g.lasso <- as(my.edges, "graphNEL") 
+    nodes(g.lasso) <- c("Population","Income","Illiteracy","Life Exp","Murder","HS Grad","Frost","Area")
+    plot(g.lasso)
+    #savepdf(paste("myplot", i, sep = "_"))
+ }
+
+```
+
+After observing the plots for various penalties, it is clear that as the value of rho is increasing, the graph is becoming sparser and easy to read.
+
+
+### Problem 6d
+
+Advantages of clustering when compared to Gaussian Graphical model:
+
+Clustering:
+
+1. It is easier to decide the number of clusters by looking at the dendogram and it is easy to implement.
+
+2. The dendogram output of the algorithm can be used to understand the big picture as well as the groups in your data.
+
+3. In this method, nodes are compared with one another based on their similarity. Larger groups are built by joining groups of nodes based on their similarity.
+
+4. The objects within a group are similar to each other and objects in one group are dissimilar to the objects in another group. 
+
+5. Follows Hard assignment of probabilities ie., each data point is assigned only to a single cluster.
+
+6. A hierarchical clustering algorithm in addition to breaking up the objects into clusters also shows the hierarchy or ranking of the distance and shows how dissimilar one cluster is from the other.
+
+Gaussian Graphical model:
+
+1. Gaussian Graphical Models (GMMs) assume that there are a certain number of Gaussian distributions, and each of these distributions represent a cluster. Hence, a Gaussian Mixture Model tends to group the data points belonging to a single distribution together.
+
+2. In this method, each cluster is modelled according to a different Gaussian distribution. 
+
+3. This flexible and probabilistic approach to modelling the data means that rather than having hard assignments into clusters like k-means clustering, we have soft assignments (each data point can be assigned to two different clusters with different probabilities).
+
+4. Since, GGM's follow soft assignments to clusters, finding the number of clusters is difficult compared to other clustering algorithms.
+
+
+
