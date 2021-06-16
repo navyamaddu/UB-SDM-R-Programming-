@@ -1,0 +1,269 @@
+---
+title: "Homework_3"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+	echo = TRUE,
+	message = FALSE,
+	warning = FALSE
+)
+```
+
+
+
+```{r}
+#if (!requireNamespace("BiocManager", quietly = TRUE))
+#  install.packages("BiocManager")
+#BiocManager::install(version = "3.12")
+#BiocManager::install("multtest")
+#BiocManager::install("cluster")
+#install.packages("fpc")
+#install.packages("bootcluster")
+```
+
+
+```{r}
+library("multtest")
+library("fpc")
+library("cluster")
+library("fossil")
+library("lfe")
+
+```
+
+## Problem 1 - Please refer attached pdf.
+
+## Problem 2
+
+The given dissimilarity matrix for 4 observations is stored as dis_matrix.
+
+### Problem 2a
+
+Let us use the command hclust() to plot the dendogram using complete linkage. 
+
+Complete linkage method finds the maximum possible distance between points belonging to two different clusters.
+
+```{r}
+dis_matrix = as.dist(matrix(c(0, 0.3, 0.4, 0.7, 
+                     0.3, 0, 0.5, 0.8,
+                     0.4, 0.5, 0.0, 0.45,
+                     0.7, 0.8, 0.45, 0.0), nrow=4))
+
+plot(hclust(dis_matrix, method="complete"))
+```
+
+
+From the dendogram, we observe that the observations 1 and 2 are fused at 0.3 as they have smallest inter-cluster distance.
+
+Next, the observations 3 and 4 are fused together at 0.45 since it is the next smallest inter-cluster distance.
+
+Now the two clusters (1,2 and 3,4) are fused together at dissimilarity 0.8 since complete linkage takes into consideration the maximum distance between points belonging to different clusters.
+
+### Problem 2b.
+
+Now let us plot the dendogram using single linkage.
+
+Single linkage find the minimum possible distance between points belonging to two different clusters.
+
+```{r}
+plot(hclust(dis_matrix, method = "single"))
+```
+
+From the dendogram, we observe that the observations 1 and 2 are fused together at 0.3 since it is the smallest inter-cluster distance.
+
+Now, the observation 3 is fused to the cluster(1 and 2) at 0.4 since single linkage takes into consideration the minimum distance between different clusters.
+
+Next, the observation 4 is fused with the cluster (3, 1 and 2) at 0.45 since single linkage takes into consideration the minimum distance between different clusters.
+
+### Problem 2c
+
+If we want to cut the dendogram from problem 2a into 2 clusters, we get 1,2 observations in a cluster and 3,4 observations in another cluster.
+
+
+### Problem 2d
+
+If we want to cut the dendogram from problem 2b into 2 clusters, 1,2 and 3 observations are in one cluster and observation 4 will be in a separate cluster.
+
+### Problem 2e
+
+We can swap the position of the two clusters being fused  without changing the meaning of the dendogram from problem 2a(complete linkage).
+
+Since 1 and 2 observations belong to a cluster, we can swap their positions (can be written as 2 ,1).
+
+Similarly, 3 and 4 observations belong to a cluster, hence they can be swapped without changing the meaning of dendogram.
+
+
+```{r}
+plot(hclust(dis_matrix, method = "complete"), labels = c(2, 1, 4, 3))
+```
+
+Now, the new labels become 2,1,4,3 but the meaning of the dendogram doesnot change(i.e., the dissimilarity with each cluster and the dissimilarity within different clusters are same although the position of labels is changed).
+
+
+
+## Problem 3
+
+The goal is to generate a simulated data set with 20 observations in each of three classes (i.e. 60 observations total) and 50 variables and apply k-means using rand index and adjusted rand index to access the performance and finally apply gap statistics and Silhouette plots to find the optimal number of clusters.
+
+Let us generate simulated data with 60 observations with 20 observations in each of the classes(by applying the mean shift)
+
+
+```{r}
+set.seed(2)
+x = matrix(rnorm(20*3*50, mean=0,sd=0.01), ncol=50)
+x[1:20, 1] = x[1:20, 1]+4
+x[21:40, 2] = x[21:40, 1]+2
+x[41:60, 1] = x[41:60, 1]+5
+dim(x)
+```
+
+Here, I have added the true classes as 1,2 and 3 for comparing the results with the obtained k-means clustered results.
+
+
+```{r}
+new_mat <- cbind(x, class = as.factor(c(rep(1,20), rep(2,20), rep(3,20))))
+
+dt <- data.frame(new_mat)
+
+```
+
+## Problem 3b- k-means clustering
+
+Now let us apply k-means clustering with k=3 and check whether the observations are divided into 3 clusters.
+
+The function kmeans() is run with multiple initial cluster assignments using the nstart argument. If a value of nstart greater than one is used, then K-means clustering will be performed using multiple random assignments and the kmeans() function will report only the best results. Here we set the value nstart=20.
+
+```{r}
+set.seed(54)
+km.out=kmeans(x,3,nstart=20)
+km.out
+
+```
+
+The output of the kmeans gives the cluster means, clustering vector, within cluster sum of squares by cluster.
+
+```{r}
+km.out$cluster
+```
+
+From the clustering vector, we can observe that first 20 observations are classified into cluster 1 and remaining 40 are classified into clusters 2 and 3 respectively.
+
+Now, let us compare the output of the k-means with the true labels.
+
+```{r}
+#true_class = c(rep(1,20), rep(2,20), rep(3,20))
+table(km.out$cluster, dt$class)
+```
+
+We can observe that the cluster division by k-means clustering with k=3 is perfect since we know that the data contains three clusters(with the addition of mean shift).
+
+### PCA to find the cluster distribution.
+
+Let us plot the first 2 principal components to view the cluster distribution.
+
+```{r}
+#km.out$centers
+X.pca = prcomp(x)
+summary(X.pca)
+library(ggplot2)
+ggplot(data.frame(pc1 = X.pca$x[,1], pc2 = X.pca$x[,2], class = dt$class), aes(pc1, pc2, col = class)) + geom_point() + theme(legend.position="none")
+
+```
+
+### Rand index and Adjusted rand index.
+
+The function rand.index calculates the Rand Index for two different clustering outcomes. The Rand Index gives a value between 0 and 1, where 1 means the two clustering outcomes match identically.
+
+The Adjusted Rand Index re-scales the index, taking into account that random chance will cause some objects to occupy the same clusters, so the Rand Index will never actually be zero.
+
+```{r}
+rand.index(km.out$cluster, dt$class)
+adj.rand.index(km.out$cluster, dt$class)
+
+```
+
+The output of Rand Index and Adjusted Rand Index are 1 indicating that the two groups(k-means clustered output and true classes) match identically.
+
+### Problem 3c- Silhouette Plots
+
+Now let us select the optimal number of clusters using Silhouette plots.
+
+The silhouette method computes silhouette coefficients of each point that measure how much a point is similar to its own cluster compared to other clusters.
+
+The value of the silhouette ranges between [1, -1], where a high value indicates that the object is well matched to its own cluster and poorly matched to neighboring clusters
+
+```{r}
+library(cluster)
+dis=dist(x)
+dis
+sil_kmeans <- silhouette(km.out$cluster,dis, nstart = 20, K.max = 10, B = 100)
+plot(sil_kmeans, main = "Silhouette Plots: kmeans")
+
+```
+
+From the above silhouette plot, we can clearly say that number of optimal clusters are 3.
+
+Now let us pick a range of candidate values of k (number of clusters), then train K-Means clustering for each of the values of k. For each k-Means clustering model, the average silhouette scores are represented in a plot and the fluctuations of each cluster are observed.
+
+```{r}
+silhouette_score <- function(k){
+  km <- kmeans(x, centers = k, nstart=20)
+  ss <- silhouette(km$cluster, dist(x))
+  mean(ss[, 3])
+}
+k <- 2:10
+avg_sil <- sapply(k, silhouette_score)
+plot(k, type='b', avg_sil, xlab='Number of clusters', ylab='Average Silhouette Scores', frame=FALSE)
+```
+
+The average silhouette score for k=3 is high(before it shrinks again) compared to other values of k
+
+So the optimal(best) number of clusters obtained using silhouette plots is 3.
+
+Now, let us plot the average silhouette widths for a range of k values.
+
+```{r}
+library(NbClust)
+library(factoextra)
+fviz_nbclust(x, kmeans, method = "silhouette")
+```
+
+The average silhouette width for k=3 is high(before it shrinks again) compared to other values of k
+
+So the optimal(best) number of clusters obtained using silhouette plots is 3.
+
+### Problem 3d - Gap Statistics
+
+Now let us apply gap statistics to find the optimal number of clusters.
+
+clusGap() performs gap statistic by applying k-means clustering to a range of k-values and finds the average distance of each point in a cluster to its centroid and represent it in a plot.
+
+We then have to pick the value of k where the average distance falls suddenly.
+
+
+```{r}
+gap_kmeans <- clusGap(x[,1:50], kmeans, nstart = 20, K.max = 10, B = 100)
+#plot(gap_kmeans, main = "Gap Statistic: kmeans")
+fviz_gap_stat(gap_kmeans)
+
+```
+
+
+The optimal value for K=3 is chosen, because gap statistic selects the first peak point before the value shrinks again(elbow method)
+
+So, we can say that 3 optimal clusters are obtained using gap statistics.
+
+Hence, we can say that gap statistic correctly identified the number of clusters since we know that the data originally contains 3 clusters.
+
+
+
+
+
+
+
+
